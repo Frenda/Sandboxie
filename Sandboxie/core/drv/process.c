@@ -1,5 +1,6 @@
 /*
  * Copyright 2004-2020 Sandboxie Holdings, LLC 
+ * Copyright 2020 David Xanatos, xanasoft.com
  *
  * This program is free software: you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -512,7 +513,8 @@ _FX void Process_CreateTerminated(HANDLE ProcessId, ULONG SessionId)
     if (pid_str.Buffer) {
 
         RtlIntPtrToUnicodeString((ULONG_PTR)ProcessId, 10, &pid_str);
-		Log_Msg_Process(MSG_1211, pid_str.Buffer, NULL, SessionId, ProcessId);
+		if (SessionId != -1) // for StartRunAlertDenied
+			Log_Msg_Process(MSG_1211, pid_str.Buffer, NULL, SessionId, ProcessId);
 
         Mem_Free(pid_str.Buffer, pid_str.MaximumLength);
     }
@@ -629,7 +631,7 @@ _FX PROCESS *Process_Create(
             RtlInitUnicodeString(&image_uni, image_path);
             if (Box_IsBoxedPath(proc->box, file, &image_uni)) {
 
-                proc->image_copy = TRUE;
+                proc->image_from_box = TRUE;
             }
 
             ++image_name;
@@ -1017,6 +1019,10 @@ _FX void Process_NotifyProcess_Create(
 
             if (! bHostInject)
             {
+				WCHAR msg[48], *buf = msg;
+				buf += swprintf(buf, L"%s%c%d", new_proc->box->name, L'\0', (ULONG)ParentId) + 1;
+				Log_Popup_MsgEx(MSG_1399, new_proc->image_path, wcslen(new_proc->image_path), msg, (ULONG)(buf - msg), new_proc->box->session_id, ProcessId);
+
                 if (! add_process_to_job)
                     new_proc->parent_was_sandboxed = TRUE;
 
@@ -1024,10 +1030,10 @@ _FX void Process_NotifyProcess_Create(
                 // don't put the process into a job if OpenWinClass=*
                 //
 
-                if (new_proc->open_all_win_classes || Conf_Get_Boolean(box->name, L"NoAddProcessToJob", 0, FALSE)) {
+				if (new_proc->open_all_win_classes || Conf_Get_Boolean(new_proc->box->name, L"NoAddProcessToJob", 0, FALSE)) {
 
-                    add_process_to_job = FALSE;
-                }
+					add_process_to_job = FALSE;
+				}
 
                 //
                 // on Windows Vista, a forced process may start inside a
@@ -1062,7 +1068,6 @@ _FX void Process_NotifyProcess_Create(
 
             Process_Low_Inject(
                 pid, session_id, create_time, nptr1, add_process_to_job, bHostInject);
-
         }
     }
 
@@ -1141,7 +1146,7 @@ _FX void Process_Delete(HANDLE ProcessId)
             if (proc->gui_lock)
                 Mem_FreeLockResource(&proc->gui_lock);
 
-            Token_ResetPrimary(proc);
+			Token_ResetPrimary(proc);
 
             Thread_ReleaseProcess(proc);
 
@@ -1255,20 +1260,21 @@ _FX void Process_NotifyImage(
     // terminate process if initialization failed
     //
 
-    if (!fail) {
+    if (!fail && !Ipc_IsRunRestricted(proc)) {
 
         proc->initialized = TRUE;
 
     } else {
 
-		Log_Status_Ex_Process(MSG_1231, fail, STATUS_UNSUCCESSFUL, NULL, proc->box->session_id, proc->pid);
+		if (fail)
+			Log_Status_Ex_Process(MSG_1231, 0xA0 + fail, STATUS_UNSUCCESSFUL, NULL, proc->box->session_id, proc->pid);
 
         proc->terminated = TRUE;
-		proc->reason = 0xA0 + fail;
+		proc->reason = (!fail) ? -1 : 0;
         Process_CancelProcess(proc);
     }
 
-    //DbgPrint("IMAGE LOADED, PROCESS INITIALIZATION %d COMPLETE %d\n", proc->pid, !fail);
+    //DbgPrint("IMAGE LOADED, PROCESS INITIALIZATION %d COMPLETE %d\n", proc->pid, ok);
 }
 
 

@@ -1,5 +1,6 @@
 /*
  * Copyright 2004-2020 Sandboxie Holdings, LLC 
+ * Copyright 2020 David Xanatos, xanasoft.com
  *
  * This program is free software: you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -513,6 +514,9 @@ BOOL File_WriteProcessMemory(
     SIZE_T nSize,
     SIZE_T * lpNumberOfBytesWritten)
 {
+    //
+    // this function is only hooked when Dll_ImageType == DLL_IMAGE_MOZILLA_FIREFOX
+    //
 
     if (lpBaseAddress && lpBaseAddress == GetProcAddress(Dll_Ntdll, "NtSetInformationThread"))
     {
