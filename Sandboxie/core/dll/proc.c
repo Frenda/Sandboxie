@@ -1,6 +1,6 @@
 /*
  * Copyright 2004-2020 Sandboxie Holdings, LLC 
- * Copyright 2020 David Xanatos, xanasoft.com
+ * Copyright 2020-2021 David Xanatos, xanasoft.com
  *
  * This program is free software: you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -35,7 +35,6 @@
 //---------------------------------------------------------------------------
 // Functions
 //---------------------------------------------------------------------------
-
 
 static BOOL Proc_CreateProcessInternalW(
     HANDLE hToken,
@@ -73,6 +72,11 @@ static BOOL Proc_UpdateProcThreadAttribute(
 	_In_ SIZE_T cbSize,
 	_Out_writes_bytes_opt_(cbSize) PVOID lpPreviousValue,
 	_In_opt_ PSIZE_T lpReturnSize);
+
+static BOOL Proc_SetProcessMitigationPolicy(
+    _In_ PROCESS_MITIGATION_POLICY MitigationPolicy,
+    _In_reads_bytes_(dwLength) PVOID lpBuffer,
+    _In_ SIZE_T dwLength);
 
 static BOOL Proc_AlternateCreateProcess(
     const WCHAR *lpApplicationName, WCHAR *lpCommandLine,
@@ -264,6 +268,11 @@ typedef BOOL(*P_UpdateProcThreadAttribute)(
 	_Out_writes_bytes_opt_(cbSize) PVOID lpPreviousValue,
 	_In_opt_ PSIZE_T lpReturnSize);
 
+typedef BOOL (*P_SetProcessMitigationPolicy)(
+    _In_ PROCESS_MITIGATION_POLICY MitigationPolicy,
+    _In_reads_bytes_(dwLength) PVOID lpBuffer,
+    _In_ SIZE_T dwLength);
+
 //---------------------------------------------------------------------------
 
 
@@ -295,6 +304,8 @@ static P_AddAccessAllowedAceEx      __sys_AddAccessAllowedAceEx		= NULL;
 static P_GetLengthSid				__sys_GetLengthSid				= NULL;*/
 
 static P_UpdateProcThreadAttribute	__sys_UpdateProcThreadAttribute = NULL;
+
+static P_SetProcessMitigationPolicy	__sys_SetProcessMitigationPolicy = NULL;
 
 //---------------------------------------------------------------------------
 // Variables
@@ -372,9 +383,17 @@ _FX BOOLEAN Proc_Init(void)
 			SBIEDLL_HOOK(Proc_, UpdateProcThreadAttribute);
 	}
 
-	// OriginalToken BEGIN
-	if (!SbieApi_QueryConfBool(NULL, L"OriginalToken", FALSE))
-	// OriginalToken END
+    // fox for SBIE2303 Could not hook ... (33, 1655) due to mitigation policies
+    if (Dll_OsBuild >= 8400)    // win8
+    {
+        void* SetProcessMitigationPolicy = NULL;
+        RtlInitString(&ansi, "SetProcessMitigationPolicy");
+        status = LdrGetProcedureAddress(
+            Dll_KernelBase, &ansi, 0, (void**)&SetProcessMitigationPolicy);
+        if (NT_SUCCESS(status))
+            SBIEDLL_HOOK(Proc_, SetProcessMitigationPolicy);
+    }
+
     if(Dll_OsBuild < 17677) {
     
         SBIEDLL_HOOK(Proc_,CreateProcessInternalW);
@@ -729,6 +748,21 @@ _FX BOOL Proc_CreateProcessInternalW(
         }
     }
 
+    // OriginalToken BEGIN
+    if (SbieApi_QueryConfBool(NULL, L"OriginalToken", FALSE))
+    {
+        ok = __sys_CreateProcessInternalW(
+            hToken, lpApplicationName, lpCommandLine,
+            lpProcessAttributes, lpThreadAttributes, bInheritHandles, dwCreationFlags,
+            lpEnvironment, lpCurrentDirectory,
+            lpStartupInfo, lpProcessInformation, hNewToken);
+
+        err = GetLastError();
+
+        goto finish;
+    }
+    // OriginalToken END
+
     //
     // create the new process
     //
@@ -935,6 +969,12 @@ finish:
         TlsData->proc_command_line = NULL;
     }
 
+    {
+        WCHAR msg[1024];
+        Sbie_snwprintf(msg, 1024, L"CreateProcess: %s (%s); err=%d", lpApplicationName ? lpApplicationName : L"[noName]", lpCommandLine ? lpCommandLine : L"[noCmd]", ok ? 0 : err);
+        SbieApi_MonitorPut2(MONITOR_OTHER | MONITOR_TRACE, msg, FALSE);
+    }
+
     SetLastError(err);
     return ok;
 }
@@ -953,8 +993,11 @@ _FX BOOL Proc_UpdateProcThreadAttribute(
 	// when the PROC_THREAD_ATTRIBUTE_JOB_LIST is set the call CreateProcessAsUserW -> CreateProcessInternalW -> NtCreateProcess 
 	// fals with an access denided error, so we need to block this attribute form being set
 	// if(Dll_ImageType == DLL_IMAGE_GOOGLE_CHROME)
-	if (Attribute == 0x0002000d) //PROC_THREAD_ATTRIBUTE_JOB_LIST
-		return TRUE;
+    if (Attribute == 0x0002000d) //PROC_THREAD_ATTRIBUTE_JOB_LIST
+    {
+        if (!SbieApi_QueryConfBool(NULL, L"NoAddProcessToJob", FALSE))
+            return TRUE;
+    }
 
 	// some mitigation flags break SbieDll.dll Injection, so we disable them
 	if (Attribute == 0x00020007) //PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY
@@ -970,6 +1013,21 @@ _FX BOOL Proc_UpdateProcThreadAttribute(
 	}
 
 	return __sys_UpdateProcThreadAttribute(lpAttributeList, dwFlags, Attribute, lpValue, cbSize, lpPreviousValue, lpReturnSize);
+}
+
+
+_FX BOOL Proc_SetProcessMitigationPolicy(
+    _In_ PROCESS_MITIGATION_POLICY MitigationPolicy,
+    _In_reads_bytes_(dwLength) PVOID lpBuffer,
+    _In_ SIZE_T dwLength)
+{
+    // fix for SBIE2303 Could not hook ... (33, 1655)
+    // This Mitigation Policy breaks our ability to hook functions once its enabled,
+    // As we need to be able to hook them we prevent the activation of this policy.
+    if (MitigationPolicy == ProcessDynamicCodePolicy)
+        return TRUE;
+
+    return __sys_SetProcessMitigationPolicy(MitigationPolicy, lpBuffer, dwLength);
 }
 
 void *Proc_GetImageFullPath(const WCHAR *lpApplicationName, const WCHAR *lpCommandLine)
@@ -1167,6 +1225,21 @@ _FX BOOL Proc_CreateProcessInternalW_RS5(
         }
     }
 
+    // OriginalToken BEGIN
+    if (SbieApi_QueryConfBool(NULL, L"OriginalToken", FALSE))
+    {
+        ok = __sys_CreateProcessInternalW_RS5(
+            hToken, lpApplicationName, lpCommandLine,
+            lpProcessAttributes, lpThreadAttributes, bInheritHandles,
+            dwCreationFlags, lpEnvironment, lpCurrentDirectory,
+            lpStartupInfo, lpProcessInformation, hNewToken);
+
+        err = GetLastError();
+
+        goto finish;
+    }
+    // OriginalToken END
+
     if (!(dwCreationFlags & CREATE_SUSPENDED))
         resume_thread = TRUE;
     dwCreationFlags |= CREATE_SUSPENDED;
@@ -1297,6 +1370,8 @@ _FX BOOL Proc_CreateProcessInternalW_RS5(
     // handle CreateProcessInternal returning ERROR_ELEVATION_REQUIRED
     //
 
+finish:
+
     --TlsData->proc_create_process;
 
     if ((!ok) && (err == ERROR_ELEVATION_REQUIRED)) {
@@ -1327,6 +1402,12 @@ _FX BOOL Proc_CreateProcessInternalW_RS5(
         TlsData->proc_command_line = NULL;
     }
 
+    {
+        WCHAR msg[1024];
+        Sbie_snwprintf(msg, 1024, L"CreateProcess: %s (%s); err=%d", lpApplicationName ? lpApplicationName : L"[noName]", lpCommandLine ? lpCommandLine : L"[noCmd]", ok ? 0 : err);
+        SbieApi_MonitorPut2(MONITOR_OTHER | MONITOR_TRACE, msg, FALSE);
+    }
+
     SetLastError(err);
     return ok;
 }
@@ -1342,11 +1423,13 @@ _FX BOOL Proc_AlternateCreateProcess(
     void *lpCurrentDirectory, LPPROCESS_INFORMATION lpProcessInformation,
     BOOL *ReturnValue)
 {
+    if (SbieApi_QueryConfBool(NULL, L"BlockSoftwareUpdaters", TRUE))
     if (Proc_IsSoftwareUpdateW(lpApplicationName)) {
 
         SetLastError(ERROR_ACCESS_DENIED);
         *ReturnValue = FALSE;
 
+        SbieApi_MonitorPut(MONITOR_OTHER, L"Blocked start of an updater");
         return TRUE;        // exit CreateProcessInternal
     }
 
@@ -1369,11 +1452,14 @@ _FX BOOL Proc_AlternateCreateProcess(
         // don't start Kaspersky Anti Virus klwtblfs.exe component
         // because Kaspersky protects the process and we can't put
         // it into a job or inject SbieLow and so on
+        SbieApi_MonitorPut(MONITOR_OTHER, L"Blocked start of klwtblfs.exe");
         return TRUE;        // exit CreateProcessInternal
     }
     if (Dll_ImageType == DLL_IMAGE_SANDBOXIE_DCOMLAUNCH && lpCommandLine
         && wcsstr(lpCommandLine, L"smartscreen.exe")) {
-            return TRUE;        // exit CreateProcessInternal
+
+        SbieApi_MonitorPut(MONITOR_OTHER, L"Blocked start of smartscreen.exe");
+        return TRUE;        // exit CreateProcessInternal
     }
     return FALSE;           // continue with CreateProcessInternal
 }
@@ -2063,6 +2149,7 @@ _FX BOOLEAN Proc_CheckMailer(const WCHAR *ImagePath, BOOLEAN IsBoxedPath)
     BOOLEAN ok;
     WCHAR *tmp;
     const WCHAR *imgName;
+    ULONG imgType;
 
     BOOLEAN should_check_openfilepath = FALSE;
 
@@ -2075,18 +2162,15 @@ _FX BOOLEAN Proc_CheckMailer(const WCHAR *ImagePath, BOOLEAN IsBoxedPath)
     else
         imgName = ImagePath;
 
+    imgType = Dll_GetImageType(imgName);
+
     //
     // check if image name matches a well-known email program
     //
 
-    if (_wcsicmp(imgName, L"thunderbird.exe") == 0      ||
-        _wcsicmp(imgName, L"msimn.exe") == 0            ||
-        _wcsicmp(imgName, L"outlook.exe") == 0          ||
-        _wcsicmp(imgName, L"winmail.exe") == 0          ||
-        _wcsicmp(imgName, L"wlmail.exe") == 0           ||
-        _wcsicmp(imgName, L"IncMail.exe") == 0          ||
-        _wcsicmp(imgName, L"eudora.exe") == 0           ||
-        _wcsicmp(imgName, L"thebat.exe") == 0           ||
+    if (imgType == DLL_IMAGE_OFFICE_OUTLOOK     ||
+        imgType == DLL_IMAGE_WINDOWS_LIVE_MAIL  ||
+        imgType == DLL_IMAGE_OTHER_MAIL_CLIENT  ||
         0)
     {
         should_check_openfilepath = TRUE;
@@ -2128,12 +2212,12 @@ _FX BOOLEAN Proc_CheckMailer(const WCHAR *ImagePath, BOOLEAN IsBoxedPath)
     // ignore other common browsers
     //
 
-    if (_wcsicmp(imgName, L"rundll32.exe") == 0     ||
-        _wcsicmp(imgName, L"opera.exe") == 0        ||
-        _wcsicmp(imgName, L"iexplore.exe") == 0     ||
-        _wcsicmp(imgName, L"firefox.exe") == 0      ||
-        _wcsicmp(imgName, L"chrome.exe") == 0       ||
-        0                                           ) {
+    if (_wcsicmp(imgName, L"rundll32.exe") == 0  ||
+        imgType == DLL_IMAGE_INTERNET_EXPLORER   ||
+        imgType == DLL_IMAGE_MOZILLA_FIREFOX     ||
+        imgType == DLL_IMAGE_GOOGLE_CHROME       ||
+        imgType == DLL_IMAGE_OTHER_WEB_BROWSER   ||
+        0) {
 
         should_check_openfilepath = FALSE;
     }

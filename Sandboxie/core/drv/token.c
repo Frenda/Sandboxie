@@ -1,6 +1,6 @@
 /*
  * Copyright 2004-2020 Sandboxie Holdings, LLC 
- * Copyright 2020 David Xanatos, xanasoft.com
+ * Copyright 2020-2021 David Xanatos, xanasoft.com
  *
  * This program is free software: you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -27,6 +27,7 @@
 #include "api.h"
 #include "util.h"
 #include "common/my_version.h"
+#include "session.h"
 
 
 //---------------------------------------------------------------------------
@@ -190,7 +191,7 @@ _FX BOOLEAN Token_Init(void)
     MySetPrivilege(3) = SE_SHUTDOWN_PRIVILEGE;
     MySetPrivilege(4) = SE_DEBUG_PRIVILEGE;
     MySetPrivilege(5) = SE_SYSTEMTIME_PRIVILEGE;
-    MySetPrivilege(6) = SE_TIME_ZONE_PRIVILEGE;
+    MySetPrivilege(6) = SE_TIME_ZONE_PRIVILEGE; // vista
 
 #undef MySetPrivilege
 
@@ -818,6 +819,11 @@ _FX void *Token_Restrict(
     TOKEN_USER *user;
     void *NewTokenObject = NULL;
 	
+    /*if (Conf_Get_Boolean(proc->box->name, L"CreateToken", 0, FALSE))
+    {
+        
+    }*/
+
 	// OpenToken BEGIN
 	if (Conf_Get_Boolean(proc->box->name, L"OpenToken", 0, FALSE) || Conf_Get_Boolean(proc->box->name, L"UnrestrictedToken", 0, FALSE)) {
 

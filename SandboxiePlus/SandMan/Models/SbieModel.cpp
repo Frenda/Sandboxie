@@ -66,30 +66,45 @@ bool CSbieModel::TestProcPath(const QList<QVariant>& Path, const QString& BoxNam
 	return Path.size() == Index;
 }
 
+QString CSbieModel__AddGroupMark(const QString& Name)
+{
+	return Name.isEmpty() ? "" : ("!" + Name);
+}
+
+QString CSbieModel__RemoveGroupMark(const QString& Name)
+{
+	return Name.left(1) == "!" ? Name.mid(1) : Name;
+}
+
 QString CSbieModel::FindParent(const QVariant& Name, const QMap<QString, QStringList>& Groups)
 {
 	for(auto I = Groups.begin(); I != Groups.end(); ++I)
 	{
-		if (I.value().contains(Name.toString(), Qt::CaseInsensitive))
-			return I.key();
+		if (I.value().contains(CSbieModel__RemoveGroupMark(Name.toString()), Qt::CaseInsensitive))
+			return CSbieModel__AddGroupMark(I.key());
 	}
 	return QString();
 }
 
-QList<QVariant>	CSbieModel::MakeBoxPath(const QVariant& Name, const QMap<QString, QStringList>& Groups)
+void CSbieModel::MakeBoxPath(const QVariant& Name, const QMap<QString, QStringList>& Groups, QList<QVariant>& Path)
 {
 	QString ParentID = FindParent(Name, Groups);
 
-	QList<QVariant> Path;
-	if (!ParentID.isEmpty() && ParentID != Name)
+	if (!ParentID.isEmpty() && ParentID != Name && !Path.contains(ParentID))
 	{
-		Path = MakeBoxPath(ParentID, Groups);
-		Path.append(ParentID);
+		Path.prepend(ParentID);
+		MakeBoxPath(ParentID, Groups, Path);
 	}
+}
+
+QList<QVariant>	CSbieModel::MakeBoxPath(const QVariant& Name, const QMap<QString, QStringList>& Groups)
+{
+	QList<QVariant> Path;
+	MakeBoxPath(Name, Groups, Path);
 	return Path;
 }
 
-QList<QVariant> CSbieModel::Sync(const QMap<QString, CSandBoxPtr>& BoxList, const QMap<QString, QStringList>& Groups)
+QList<QVariant> CSbieModel::Sync(const QMap<QString, CSandBoxPtr>& BoxList, const QMap<QString, QStringList>& Groups, bool ShowHidden)
 {
 	QList<QVariant> Added;
 	QMap<QList<QVariant>, QList<STreeNode*> > New;
@@ -99,7 +114,7 @@ QList<QVariant> CSbieModel::Sync(const QMap<QString, CSandBoxPtr>& BoxList, cons
 	{
 		if (Group.isEmpty())
 			continue;
-		QVariant ID = Group;
+		QVariant ID = CSbieModel__AddGroupMark(Group);
 
 		QHash<QVariant, STreeNode*>::iterator I = Old.find(ID);
 		SSandBoxNode* pNode = I != Old.end() ? static_cast<SSandBoxNode*>(I.value()) : NULL;
@@ -107,8 +122,8 @@ QList<QVariant> CSbieModel::Sync(const QMap<QString, CSandBoxPtr>& BoxList, cons
 		{
 			pNode = static_cast<SSandBoxNode*>(MkNode(ID));
 			pNode->Values.resize(columnCount());
-			if (m_bTree)
-				pNode->Path = MakeBoxPath(ID, Groups);
+			if (m_bTree) 
+				pNode->Path = MakeBoxPath(ID, Groups); 
 			pNode->pBox = NULL;
 			New[pNode->Path].append(pNode);
 			Added.append(ID);
@@ -127,6 +142,9 @@ QList<QVariant> CSbieModel::Sync(const QMap<QString, CSandBoxPtr>& BoxList, cons
 
 	foreach (const CSandBoxPtr& pBox, BoxList)
 	{
+		if (!ShowHidden && !pBox->IsEnabled())
+			continue;
+
 		QVariant ID = pBox->GetName();
 
 		QModelIndex Index;
@@ -174,6 +192,12 @@ QList<QVariant> CSbieModel::Sync(const QMap<QString, CSandBoxPtr>& BoxList, cons
 			//pNode->Icon = pNode->inUse ? m_BoxInUse : m_BoxEmpty;
 			pNode->Icon = pNode->inUse ? m_BoxIcons[(EBoxColors)boxType].second : m_BoxIcons[(EBoxColors)boxType].first;
 			Changed = 1; // set change for first column
+		}
+
+		if (pNode->IsGray != !pBoxEx->IsEnabled())
+		{
+			pNode->IsGray = !pBoxEx->IsEnabled();
+			Changed = 2; // set change for all columns
 		}
 
 		for(int section = 0; section < columnCount(); section++)
@@ -296,10 +320,15 @@ bool CSbieModel::Sync(const CSandBoxPtr& pBox, const QList<QVariant>& Path, cons
 			case eName:				Value = pProcess->GetProcessName(); break;
 			case eProcessId:		Value = pProcess->GetProcessId(); break;
 			case eStatus:			Value = pProcess->GetStatusStr(); break;
-			//case eTitle:			break; // todo
+			case eTitle:			Value = theAPI->GetProcessTitle(pProcess->GetProcessId()); break;
 			//case eLogCount:			break; // todo Value = pProcess->GetResourceLog().count(); break;
 			case eTimeStamp:		Value = pProcess->GetTimeStamp(); break;
-			case ePath:				Value = pProcess->GetFileName(); break;
+			//case ePath:				Value = pProcess->GetFileName(); break;
+			case ePath: {
+									QString CmdLine = pProcess->GetCommandLine(); 
+									Value = CmdLine.isEmpty() ? pProcess->GetFileName() : CmdLine;
+									break;
+						}
 			}
 
 			SSandBoxNode::SValue& ColValue = pNode->Values[section];
@@ -365,6 +394,9 @@ QVariant CSbieModel::GetID(const QModelIndex &index) const
 	SSandBoxNode* pNode = static_cast<SSandBoxNode*>(index.internalPointer());
 	ASSERT(pNode);
 
+	if (!pNode->pProcess && !pNode->pBox)
+		return CSbieModel__RemoveGroupMark(pNode->ID.toString());
+
 	return pNode->ID;
 }
 
@@ -397,10 +429,10 @@ QVariant CSbieModel::headerData(int section, Qt::Orientation orientation, int ro
 			case eName:				return tr("Name");
 			case eProcessId:		return tr("Process ID");
 			case eStatus:			return tr("Status");
-			//case eTitle:			return tr("Title");
+			case eTitle:			return tr("Title");
 			//case eLogCount:			return tr("Log Count");
 			case eTimeStamp:		return tr("Start Time");
-			case ePath:				return tr("Path");
+			case ePath:				return tr("Path / Command Line");
 		}
 	}
     return QVariant();
