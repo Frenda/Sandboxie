@@ -72,9 +72,24 @@ public:
 
 	const QSet<QString>&	GetRecentPrograms()					{ return m_RecentPrograms; }
 
+	enum EBoxTypes
+	{
+		eDefault = 0,
+		eHardened,
+		//eHasLogApi,
+		eInsecure,
+
+		eUnknown = -1
+	};
+
+	EBoxTypes				GetType() const;
+	
+	class COptionsWindow*	m_pOptionsWnd;
+	class CRecoveryWindow*	m_pRecoveryWnd;
+
 protected:
 	friend class CSbiePlusAPI;
-	virtual bool			CheckOpenToken() const;
+	virtual bool			CheckUnsecureConfig() const;
 
 	virtual bool			TestProgramGroup(const QString& Group, const QString& ProgName);
 	virtual void			EditProgramGroup(const QString& Group, const QString& ProgName, bool bSet);

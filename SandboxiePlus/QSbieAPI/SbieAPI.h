@@ -57,10 +57,10 @@ public:
 
 	virtual SB_STATUS		ReloadBoxes(bool bFullUpdate = false);
 	static  SB_STATUS		ValidateName(const QString& BoxName);
-	virtual SB_STATUS		CreateBox(const QString& BoxName);
+	virtual SB_STATUS		CreateBox(const QString& BoxName, bool bReLoad = true);
 
-	virtual SB_STATUS		UpdateProcesses(bool bKeep);
-	virtual SB_STATUS		UpdateProcesses(bool bKeep, const CSandBoxPtr& pBox);
+	virtual SB_STATUS		UpdateProcesses(bool bKeep, bool bAllSessions);
+	//virtual SB_STATUS		UpdateProcesses(bool bKeep, const CSandBoxPtr& pBox);
 
 	virtual QMap<QString, CSandBoxPtr> GetAllBoxes() { return m_SandBoxes; }
 
@@ -88,7 +88,8 @@ public:
 	};
 
 	// Config
-	virtual SB_STATUS		ReloadConfig(quint32 SessionId = -1);
+	virtual SB_STATUS		ReloadConfig(bool ReconfigureDrv = false);
+	virtual SB_STATUS		ReloadCert();
 	virtual QString			SbieIniGet(const QString& Section, const QString& Setting, quint32 Index = 0, qint32* ErrCode = NULL);
 	virtual SB_STATUS		SbieIniSet(const QString& Section, const QString& Setting, const QString& Value, ESetMode Mode = eIniUpdate);
 	virtual bool			IsBox(const QString& BoxName, bool& bIsEnabled);
@@ -101,6 +102,9 @@ public:
 	virtual SB_STATUS		LockConfig(const QString& NewPassword);
 	virtual void			ClearPassword();
 
+	virtual quint32			GetFeatureFlags();
+	virtual QString			GetFeatureStr();
+
 	// Forced Processes
 	virtual SB_STATUS		DisableForceProcess(bool Set, int Seconds = 0);
 	virtual bool			AreForceProcessDisabled();
@@ -110,7 +114,7 @@ public:
 	virtual bool			IsMonitoring();
 
 	virtual void			AddTraceEntry(const CTraceEntryPtr& LogEntry, bool bCanMerge = false);
-	virtual QList<CTraceEntryPtr> GetTrace() const;
+	virtual QVector<CTraceEntryPtr> GetTrace() const;
 	virtual void			ClearTrace() { QWriteLocker Lock(&m_TraceMutex); m_TraceList.clear(); m_LastTraceEntry = 0; }
 
 	// Other
@@ -118,6 +122,9 @@ public:
 
 	virtual SB_STATUS		RunStart(const QString& BoxName, const QString& Command, QProcess* pProcess = NULL, bool Elevated = false);
 	virtual QString			GetStartPath() const;
+
+	virtual quint32			GetSessionID() const;
+
 
 	enum ESbieQueuedRequests
 	{
@@ -150,6 +157,8 @@ protected slots:
 protected:
 	friend class CSandBox;
 	friend class CBoxedProcess;
+
+	virtual SB_STATUS		ReloadConf(quint32 flags, quint32 SessionId = -1);
 
 	virtual CSandBox*		NewSandBox(const QString& BoxName, class CSbieAPI* pAPI);
 	virtual CBoxedProcess*	NewBoxedProcess(quint32 ProcessId, class CSandBox* pBox);
@@ -185,7 +194,7 @@ protected:
 	QMap<quint32, CBoxedProcessPtr> m_BoxedProxesses;
 
 	mutable QReadWriteLock	m_TraceMutex;
-	QList<CTraceEntryPtr>	m_TraceList;
+	QVector<CTraceEntryPtr>	m_TraceList;
 	int						m_LastTraceEntry;
 
 	mutable QReadWriteLock	m_DriveLettersMutex;

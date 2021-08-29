@@ -29,6 +29,7 @@
 #include "api.h"
 #include "util.h"
 #include "session.h"
+#include "conf.h"
 
 
 
@@ -97,10 +98,7 @@ static BOOLEAN Syscall_GetKernelAddr(
 #pragma alloc_text (INIT, Syscall_ErrorForAsciiName)
 #pragma alloc_text (INIT, Syscall_GetIndexFromNtdll)
 #pragma alloc_text (INIT, Syscall_GetKernelAddr)
-#ifdef _WIN64
-// only needed for 32-bit gui_xp code
 #pragma alloc_text (INIT, Syscall_GetServiceTable)
-#endif _WIN64
 #endif // ALLOC_PRAGMA
 
 
@@ -373,19 +371,6 @@ next_zwxxx:
         Log_Msg1(MSG_1113, L"500");
         return FALSE;
     }
-
-    //
-    // workaround for Online Armor driver
-    //
-
-#ifndef _WIN64
-
-    if (1) {
-        extern void Syscall_HandleOADriver(void);
-        Syscall_HandleOADriver();
-    }
-
-#endif ! _WIN64
 
     return TRUE;
 }
@@ -717,6 +702,7 @@ _FX NTSTATUS Syscall_Api_Invoke(PROCESS *proc, ULONG64 *parms)
 
     // DbgPrint("[syscall] request p=%06d t=%06d - BEGIN %s\n", PsGetCurrentProcessId(), PsGetCurrentThreadId(), entry->name);
 
+#ifdef XP_SUPPORT
     //
     // make sure the thread has sufficient access rights to itself
     // then impersonate the full access token for the thread or process
@@ -726,14 +712,14 @@ _FX NTSTATUS Syscall_Api_Invoke(PROCESS *proc, ULONG64 *parms)
 
         Process_SetTerminated(proc, 5);
     }
-    else {
+    else
+#endif
 
         Thread_SetThreadToken(proc);        // may set proc->terminated
-    }
 
     if (proc->terminated) {
 
-        Process_CancelProcess(proc);
+        Process_TerminateProcess(proc);
         return STATUS_PROCESS_IS_TERMINATING;
     }
 
@@ -904,7 +890,7 @@ _FX NTSTATUS Syscall_Api_Invoke(PROCESS *proc, ULONG64 *parms)
 
     if (proc->terminated) {
 
-        Process_CancelProcess(proc);
+        Process_TerminateProcess(proc);
         return STATUS_PROCESS_IS_TERMINATING;
     }
 
@@ -951,7 +937,7 @@ _FX NTSTATUS Syscall_Api_Query(PROCESS *proc, ULONG64 *parms)
     // caller must be our service process
     //
 
-    if (proc)// || (PsGetCurrentProcessId() != Api_ServiceProcessId))
+    if (proc || (PsGetCurrentProcessId() != Api_ServiceProcessId))
         return STATUS_ACCESS_DENIED;
 
     //

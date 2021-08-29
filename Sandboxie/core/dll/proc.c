@@ -499,7 +499,9 @@ _FX BOOL Proc_UpdateProcThreadAttribute(
 	// if(Dll_ImageType == DLL_IMAGE_GOOGLE_CHROME)
     if (Attribute == 0x0002000d) //PROC_THREAD_ATTRIBUTE_JOB_LIST
     {
-        if (!SbieApi_QueryConfBool(NULL, L"NoAddProcessToJob", FALSE))
+        extern BOOLEAN SysInfo_CanUseJobs;
+        extern BOOLEAN SysInfo_UseSbieJob;
+        if (!SysInfo_CanUseJobs && SysInfo_UseSbieJob)
             return TRUE;
     }
 
@@ -889,6 +891,14 @@ _FX BOOL Proc_CreateProcessInternalW(
     // OriginalToken BEGIN
     if (SbieApi_QueryConfBool(NULL, L"OriginalToken", FALSE))
     {
+        extern BOOLEAN Scm_MsiServer_Systemless;
+        if (Dll_ImageType == DLL_IMAGE_MSI_INSTALLER && Scm_MsiServer_Systemless 
+            && !SbieApi_QueryConfBool(NULL, L"RunServicesAsSystem", FALSE) && !SbieApi_QueryConfBool(NULL, L"MsiInstallerExemptions", FALSE)) {
+            // this is a simple workaround for the MSI installer to work properly
+            hToken = NULL;
+		    lpProcessAttributes = NULL;
+        }
+
         ok = __sys_CreateProcessInternalW(
             hToken, lpApplicationName, lpCommandLine,
             lpProcessAttributes, lpThreadAttributes, bInheritHandles,

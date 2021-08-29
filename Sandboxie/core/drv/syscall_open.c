@@ -625,7 +625,9 @@ _FX NTSTATUS Syscall_DuplicateHandle_2(
         TypeLength = ObjectType->Name.Length;
         TypeBuffer = ObjectType->Name.Buffer;
 
-    } else {
+    } 
+#ifdef XP_SUPPORT
+    else {
 
         OBJECT_HEADER *ObjectHeader = OBJECT_TO_OBJECT_HEADER(OpenedObject);
 
@@ -645,6 +647,7 @@ _FX NTSTATUS Syscall_DuplicateHandle_2(
             TypeBuffer = ObjectType->Name.Buffer;
         }
     }
+#endif
 
     //DbgPrint("Object %08X TypeBuffer %*.*S (%d)\n", OpenedObject, TypeLength/sizeof(WCHAR), TypeLength/sizeof(WCHAR), TypeBuffer, TypeLength);
 
@@ -703,6 +706,7 @@ _FX SYSCALL_ENTRY *Syscall_DuplicateHandle_3(
     USHORT TypeLength, WCHAR *TypeBuffer)
 {
     static const WCHAR *_Port = L"Port";
+    static const WCHAR *_Job = L"Job";
     SYSCALL_ENTRY *entry;
     ULONG name_len;
     UCHAR SyscallName[32];
@@ -722,6 +726,10 @@ _FX SYSCALL_ENTRY *Syscall_DuplicateHandle_3(
         (TypeLength == 9 && wmemcmp(TypeBuffer + 5, _Port, 4) == 0)) {
 
         strcpy(SyscallName, "ConnectPort");
+
+    } else if (TypeLength == 3 && wmemcmp(TypeBuffer, _Job, 3) == 0) {
+
+        strcpy(SyscallName, "OpenJobObject");
 
     } else if (TypeLength <= 24) {
 

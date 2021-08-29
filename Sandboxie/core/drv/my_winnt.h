@@ -210,6 +210,18 @@ typedef struct _REG_OPEN_CREATE_KEY_INFORMATION_VISTA {
 
 
 // ------------------------------------------------------------------
+// Object related
+// ------------------------------------------------------------------
+
+typedef NTSTATUS (*P_ObRegisterCallbacks)(
+    __in POB_CALLBACK_REGISTRATION CallbackRegistration,
+    __deref_out PVOID *RegistrationHandle);
+
+
+typedef NTSTATUS (*P_ObUnRegisterCallbacks)(
+    __in PVOID RegistrationHandle);
+
+// ------------------------------------------------------------------
 // File related
 // ------------------------------------------------------------------
 
@@ -263,6 +275,7 @@ typedef void(*P_KeRevertToUserAffinityThreadEx)(KAFFINITY Affinity);
 
 
 extern POBJECT_TYPE *PsProcessType;
+extern POBJECT_TYPE *MmSectionObjectType;
 extern POBJECT_TYPE *ExWindowStationObjectType;
 
 NTOS_API(ULONG_PTR) PsGetThreadWin32Thread(PETHREAD Thread);
