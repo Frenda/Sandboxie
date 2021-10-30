@@ -53,6 +53,11 @@ public:
 	void				RunSandboxed(const QStringList& Commands, const QString& BoxName);
 
 	QIcon				GetBoxIcon(bool inUse, int boxType = 0);
+	QString				GetBoxDescription(int boxType);
+
+	bool				CheckCertificate();
+
+	void				UpdateTheme();
 
 protected:
 	SB_STATUS			ConnectSbie();
@@ -112,7 +117,7 @@ public slots:
 	void				OnFileToRecover(const QString& BoxName, const QString& FilePath, const QString& BoxPath, quint32 ProcessId);
 
 	bool				OpenRecovery(const CSandBoxPtr& pBox, bool bCloseEmpty = false);
-	void				ShowRecovery(const CSandBoxPtr& pBox);
+	class CRecoveryWindow*	ShowRecovery(const CSandBoxPtr& pBox, bool bFind = true);
 
 	void				UpdateSettings();
 	void				OnIniReloaded();
@@ -130,6 +135,7 @@ public slots:
 
 	void				CheckForUpdates(bool bManual = true);
 
+	void				OpenUrl(const QString& url) { OpenUrl(QUrl(url)); }
 	void				OpenUrl(const QUrl& url);
 
 	int					ShowQuestion(const QString& question, const QString& checkBoxText, bool* checkBoxSetting, int buttons, int defaultButton);
@@ -171,6 +177,8 @@ private slots:
 	void				OnUpdateCheck();
 	void				OnUpdateProgress(qint64 bytes, qint64 bytesTotal);
 	void				OnUpdateDownload();
+
+	void				SetUITheme();
 
 private:
 	void				CreateMenus();
@@ -251,6 +259,8 @@ private:
 
 	QSystemTrayIcon*	m_pTrayIcon;
 	QMenu*				m_pTrayMenu;
+	QAction*			m_pTraySeparator;
+	QWidgetAction*		m_pTrayList;
 	QTreeWidget*		m_pTrayBoxes;
 	//QMenu*				m_pBoxMenu;
 	bool				m_bIconEmpty;
@@ -262,13 +272,13 @@ private:
 	bool				m_pProgressModal;
 	CPopUpWindow*		m_pPopUpWindow;
 
-	void				SetUITheme();
+	bool				m_ThemeUpdatePending;
 	QString				m_DefaultStyle;
 	QPalette			m_DefaultPalett;
 
 	void				LoadLanguage();
-	QTranslator			m_Translator;
-	QByteArray			m_Translation;
+	void				LoadLanguage(const QString& Lang, const QString& Module, int Index);
+	QTranslator			m_Translator[2];
 
 public:
 	quint32				m_LanguageId;

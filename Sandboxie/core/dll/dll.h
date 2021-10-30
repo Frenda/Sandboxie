@@ -112,6 +112,7 @@ enum {
     DLL_IMAGE_PLUGIN_CONTAINER,
     DLL_IMAGE_OTHER_WEB_BROWSER,
     DLL_IMAGE_OTHER_MAIL_CLIENT,
+    DLL_IMAGE_MOZILLA_THUNDERBIRD,
     DLL_IMAGE_LAST
 };
 
@@ -289,6 +290,8 @@ extern WCHAR *Ldr_ImageTruePath;
 extern BOOLEAN Ipc_OpenCOM;
 
 extern const WCHAR *Scm_CryptSvc;
+
+extern BOOLEAN Dll_SbieTrace;
 
 
 //---------------------------------------------------------------------------
@@ -712,8 +715,6 @@ BOOLEAN Com_Init_Ole32(HMODULE);
 
 BOOLEAN RpcRt_Init(HMODULE);
 
-BOOLEAN Secure_Init_Elevation(HMODULE);
-
 BOOLEAN UserEnv_Init(HMODULE);
 
 BOOLEAN UserEnv_InitVer(HMODULE);
@@ -730,15 +731,11 @@ BOOLEAN Proc_Init_AdvPack(HMODULE);
 
 BOOLEAN Custom_SilverlightAgCore(HMODULE);
 
-BOOLEAN Custom_MsgPlusLive(HMODULE);
-
 BOOLEAN Custom_OsppcDll(HMODULE);
 
 BOOLEAN Custom_InternetDownloadManager(HMODULE);
 
 BOOLEAN Custom_Avast_SnxHk(HMODULE);
-
-BOOLEAN Custom_EMET_DLL(HMODULE hmodule);
 
 BOOLEAN Custom_SYSFER_DLL(HMODULE hmodule);
 

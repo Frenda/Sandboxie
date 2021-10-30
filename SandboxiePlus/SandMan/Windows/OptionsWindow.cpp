@@ -138,7 +138,8 @@ COptionsWindow::COptionsWindow(const QSharedPointer<CSbieIni>& pBox, const QStri
 	// Templates
 	connect(ui.cmbCategories, SIGNAL(currentIndexChanged(int)), this, SLOT(OnFilterTemplates()));
 	connect(ui.txtTemplates, SIGNAL(textChanged(const QString&)), this, SLOT(OnFilterTemplates()));
-	connect(ui.treeTemplates, SIGNAL(itemClicked(QTreeWidgetItem*, int)), this, SLOT(OnTemplateClicked(QTreeWidgetItem*, int)));
+	//connect(ui.treeTemplates, SIGNAL(itemClicked(QTreeWidgetItem*, int)), this, SLOT(OnTemplateClicked(QTreeWidgetItem*, int)));
+	connect(ui.treeTemplates, SIGNAL(itemChanged(QTreeWidgetItem*, int)), this, SLOT(OnTemplateClicked(QTreeWidgetItem*, int)));
 	connect(ui.treeTemplates, SIGNAL(itemDoubleClicked(QTreeWidgetItem*, int)), this, SLOT(OnTemplateDoubleClicked(QTreeWidgetItem*, int)));
 	connect(ui.btnAddTemplate, SIGNAL(clicked(bool)), this, SLOT(OnAddTemplates()));
 	connect(ui.btnDelTemplate, SIGNAL(clicked(bool)), this, SLOT(OnDelTemplates()));
@@ -363,6 +364,8 @@ void COptionsWindow::WriteTextList(const QString& Setting, const QStringList& Li
 
 void COptionsWindow::SaveConfig()
 {
+	m_pBox->SetRefreshOnChange(false);
+
 	try
 	{
 		if (m_GeneralChanged)
@@ -406,6 +409,9 @@ void COptionsWindow::SaveConfig()
 	{
 		theGUI->CheckResults(QList<SB_STATUS>() << Status);
 	}
+
+	m_pBox->SetRefreshOnChange(true);
+	m_pBox->GetAPI()->CommitIniChanges();
 }
 
 void COptionsWindow::apply()
@@ -592,10 +598,16 @@ void COptionsWindow::LoadIniSection()
 {
 	QString Section;
 
-	m_Settings = m_pBox->GetIniSection(NULL, m_Template);
-	
-	for (QList<QPair<QString, QString>>::const_iterator I = m_Settings.begin(); I != m_Settings.end(); ++I)
-		Section += I->first + "=" + I->second + "\n";
+	// Note: the service only caches sandboxie.ini not templates. ini hence for global tempaltes we need to load the section through the driver
+	if (m_Template && m_pBox->GetName().mid(9, 6).compare("Local_", Qt::CaseInsensitive) != 0)
+	{
+		m_Settings = m_pBox->GetIniSection(NULL, m_Template);
+
+		for (QList<QPair<QString, QString>>::const_iterator I = m_Settings.begin(); I != m_Settings.end(); ++I)
+			Section += I->first + "=" + I->second + "\n";
+	}
+	else
+		Section = m_pBox->GetAPI()->SbieIniGetEx(m_pBox->GetName(), "");
 
 	ui.txtIniSection->setPlainText(Section);
 }
@@ -603,6 +615,8 @@ void COptionsWindow::LoadIniSection()
 void COptionsWindow::SaveIniSection()
 {
 	m_ConfigDirty = true;
+
+	/*m_pBox->SetRefreshOnChange(false);
 
 	// Note: an incremental update would be more elegant but it would change the entry order in the ini,
 	//			hence it's better for the user to fully rebuild the section each time.
@@ -631,6 +645,11 @@ void COptionsWindow::SaveIniSection()
 	//
 	//for (QList<QPair<QString, QString>>::const_iterator I = NewSettings.begin(); I != NewSettings.end(); ++I)
 	//	m_pBox->InsertText(I->first, I->second);
+
+	m_pBox->SetRefreshOnChange(true);
+	m_pBox->GetAPI()->CommitIniChanges();*/
+
+	m_pBox->GetAPI()->SbieIniSet(m_pBox->GetName(), "", ui.txtIniSection->toPlainText());
 
 	LoadIniSection();
 }

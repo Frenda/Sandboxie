@@ -2,6 +2,7 @@
 #include "SettingsWindow.h"
 #include "SandMan.h"
 #include "../MiscHelpers/Common/Settings.h"
+#include "../MiscHelpers/Common/Common.h"
 #include "Helpers/WinAdmin.h"
 #include "../QSbieAPI/Sandboxie/SbieTemplates.h"
 #include "../QSbieAPI/SbieUtils.h"
@@ -146,8 +147,8 @@ CSettingsWindow::CSettingsWindow(QWidget *parent)
 
 	connect(ui.treeCompat, SIGNAL(itemClicked(QTreeWidgetItem*, int)), this, SLOT(OnTemplateClicked(QTreeWidgetItem*, int)));
 
-	connect(ui.lblSupport, SIGNAL(linkActivated(const QString&)), this, SLOT(OnSupport(const QString&)));
-	connect(ui.lblSupportCert, SIGNAL(linkActivated(const QString&)), this, SLOT(OnSupport(const QString&)));
+	connect(ui.lblSupport, SIGNAL(linkActivated(const QString&)), theGUI, SLOT(OpenUrl(const QString&)));
+	connect(ui.lblSupportCert, SIGNAL(linkActivated(const QString&)), theGUI, SLOT(OpenUrl(const QString&)));
 
 	m_CertChanged = false;
 	connect(ui.txtCertificate, SIGNAL(textChanged()), this, SLOT(CertChanged()));
@@ -165,11 +166,6 @@ CSettingsWindow::CSettingsWindow(QWidget *parent)
 CSettingsWindow::~CSettingsWindow()
 {
 	theConf->SetBlob("SettingsWindow/Window_Geometry",saveGeometry());
-}
-
-void CSettingsWindow::OnSupport(const QString& url)
-{
-	QDesktopServices::openUrl(url);
 }
 
 void CSettingsWindow::showCompat()
@@ -218,10 +214,10 @@ void CSettingsWindow::LoadSettings()
 	ui.chkSandboxUrls->setCheckState(CSettingsWindow__Int2Chk(theConf->GetInt("Options/OpenUrlsSandboxed", 2)));
 
 	ui.chkShowRecovery->setChecked(theConf->GetBool("Options/ShowRecovery", false));
-	ui.chkInstantRecovery->setChecked(theConf->GetBool("Options/InstantRecovery", false));
+	ui.chkNotifyRecovery->setChecked(!theConf->GetBool("Options/InstantRecovery", true));
 
 	ui.chkPanic->setChecked(theConf->GetBool("Options/EnablePanicKey", false));
-	ui.keyPanic->setKeySequence(QKeySequence(theConf->GetString("Options/PanicKeySequence", "Ctrl+Alt+Cancel")));
+	ui.keyPanic->setKeySequence(QKeySequence(theConf->GetString("Options/PanicKeySequence", "Shift+Pause")));
 
 	ui.chkWatchConfig->setChecked(theConf->GetBool("Options/WatchIni", true));
 
@@ -286,6 +282,7 @@ void CSettingsWindow::LoadSettings()
 	else
 		ui.chkAutoRoot->setVisible(false);
 
+	ui.lblCertExp->setVisible(false);
 	if (!g_Certificate.isEmpty()) 
 	{
 		ui.txtCertificate->setPlainText(g_Certificate);
@@ -333,7 +330,7 @@ void CSettingsWindow::SaveSettings()
 	theConf->SetValue("Options/OpenUrlsSandboxed", CSettingsWindow__Chk2Int(ui.chkSandboxUrls->checkState()));
 
 	theConf->SetValue("Options/ShowRecovery", ui.chkShowRecovery->isChecked());
-	theConf->SetValue("Options/InstantRecovery", ui.chkInstantRecovery->isChecked());
+	theConf->SetValue("Options/InstantRecovery", !ui.chkNotifyRecovery->isChecked());
 
 	theConf->SetValue("Options/EnablePanicKey", ui.chkPanic->isChecked());
 	theConf->SetValue("Options/PanicKeySequence", ui.keyPanic->keySequence().toString());
@@ -421,6 +418,13 @@ void CSettingsWindow::SaveSettings()
 					Rejected.append(pItem->data(0, Qt::UserRole).toString());
 				else
 					Used.append(pItem->data(0, Qt::UserRole).toString());
+			}
+
+			// retain local templates
+			foreach(const QString& Template, theAPI->GetGlobalSettings()->GetTextList("Template", false)) {
+				if (Template.left(6) == "Local_") {
+					Used.append(Template);
+				}
 			}
 
 			theAPI->GetGlobalSettings()->UpdateTextList("Template", Used, false);

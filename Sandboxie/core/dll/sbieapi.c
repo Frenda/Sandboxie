@@ -97,6 +97,13 @@ _FX NTSTATUS SbieApi_Ioctl(ULONG64 *parms)
     UNICODE_STRING uni;
     IO_STATUS_BLOCK MyIoStatusBlock;
 
+    if (Dll_SbieTrace && parms[0] != API_MONITOR_PUT2) {
+        WCHAR dbg[1024];
+        extern const wchar_t* Trace_SbieDrvFunc2Str(ULONG func);
+        Sbie_snwprintf(dbg, 1024, L"SbieApi_Ioctl: %s %s", Dll_ImageName, Trace_SbieDrvFunc2Str((ULONG)parms[0]));
+        SbieApi_MonitorPut2(MONITOR_OTHER | MONITOR_TRACE, dbg, FALSE);
+    }
+
     if (SbieApi_DeviceHandle == INVALID_HANDLE_VALUE) {
 
         RtlInitUnicodeString(&uni, API_DEVICE_NAME);
@@ -1288,7 +1295,7 @@ _FX LONG SbieApi_EnumBoxesEx(
     LONG rc;
     while (1) {
         ++index;
-        rc = SbieApi_QueryConf(NULL, NULL, index | CONF_GET_NO_EXPAND,
+        rc = SbieApi_QueryConf(NULL, NULL, index | CONF_GET_NO_TEMPLS | CONF_GET_NO_EXPAND,
                                box_name, sizeof(WCHAR) * 34);
         if (rc == STATUS_BUFFER_TOO_SMALL)
             continue;

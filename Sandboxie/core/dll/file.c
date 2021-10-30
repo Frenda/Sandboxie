@@ -2491,6 +2491,15 @@ _FX NTSTATUS File_NtCreateFileImpl(
         status = File_GetName(
             ObjectAttributes->RootDirectory, ObjectAttributes->ObjectName,
             &TruePath, &CopyPath, &FileFlags);
+
+        //
+        // this is some sort of device access
+        //
+
+        if (status == STATUS_OBJECT_PATH_SYNTAX_BAD) {
+
+        	SbieApi_MonitorPut2(MONITOR_PIPE | MONITOR_DENY, TruePath, FALSE);
+        }
     }
 
     //if ( (wcsstr(TruePath, L"Harddisk0\\DR0") != 0) || wcsstr(TruePath, L"HarddiskVolume3") != 0) {
@@ -5885,16 +5894,19 @@ _FX NTSTATUS File_SetDisposition(
     THREAD_DATA *TlsData = Dll_GetTlsData(&LastError);
 
     UNICODE_STRING uni;
+    //WCHAR *DosPath;
     NTSTATUS status;
-    ULONG mp_flags;
     ULONG FileFlags;
+    ULONG mp_flags;
 
     //
     // check if the specified path is an open or closed path
     //
 
+    RtlInitUnicodeString(&uni, L"");
+    
     mp_flags = 0;
-    FileFlags = 0;
+    //DosPath = NULL;
 
     Dll_PushTlsNameBuffer(TlsData);
 
@@ -5902,7 +5914,6 @@ _FX NTSTATUS File_SetDisposition(
 
         WCHAR *TruePath, *CopyPath;
 
-        RtlInitUnicodeString(&uni, L"");
         status = File_GetName(
                     FileHandle, &uni, &TruePath, &CopyPath, &FileFlags);
 
@@ -5912,6 +5923,37 @@ _FX NTSTATUS File_SetDisposition(
 
             if (PATH_IS_CLOSED(mp_flags))
                 status = STATUS_ACCESS_DENIED;
+
+            else if (PATH_NOT_OPEN(mp_flags)) {
+
+                status = File_DeleteDirectory(CopyPath, TRUE);
+
+                if (status != STATUS_DIRECTORY_NOT_EMPTY)
+                    status = STATUS_SUCCESS;
+
+                /*
+                if (NT_SUCCESS(status) && Dll_ChromeSandbox) {
+
+                    //
+                    // if this is a Chrome sandbox process, we have
+                    // to pass a DOS path to NtDeleteFile rather
+                    // than a file handle
+                    //
+
+                    ULONG len = wcslen(TruePath);
+                    DosPath = Dll_AllocTemp((len + 8) * sizeof(WCHAR));
+                    wmemcpy(DosPath, TruePath, len + 1);
+                    if (SbieDll_TranslateNtToDosPath(DosPath)) {
+                        len = wcslen(DosPath);
+                        wmemmove(DosPath + 4, DosPath, len + 1);
+                        wmemcpy(DosPath, File_BQQB, 4);
+                    } else {
+                        Dll_Free(DosPath);
+                        DosPath = NULL;
+                    }
+                }
+                */
+            }
         }
 
     } __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -5924,7 +5966,7 @@ _FX NTSTATUS File_SetDisposition(
     // handle the request appropriately
     //
   
-    if (PATH_IS_OPEN(mp_flags) || (FileFlags & FGN_IS_BOXED_PATH) != 0) {
+    if (PATH_IS_OPEN(mp_flags) /*|| ((FileFlags & FGN_IS_BOXED_PATH) != 0)*/) { // boxed path fails for directories
 
         status = __sys_NtSetInformationFile(
             FileHandle, IoStatusBlock,
@@ -5932,13 +5974,7 @@ _FX NTSTATUS File_SetDisposition(
 
     } else if (NT_SUCCESS(status)) {
 
-        IoStatusBlock->Status = 0;
-        IoStatusBlock->Information = 8;
-    }
-
-    if (NT_SUCCESS(status) && !PATH_IS_OPEN(mp_flags)) {
-
-        BOOLEAN DeleteOnClose;
+        BOOLEAN DeleteOnClose = FALSE;
 
         if (FileInformationClass == FileDispositionInformation) {
 
@@ -5954,18 +5990,49 @@ _FX NTSTATUS File_SetDisposition(
                 DeleteOnClose = FALSE;
         }
 
+        OBJECT_ATTRIBUTES objattrs;
 
-        EnterCriticalSection(&File_HandleOnClose_CritSec);
+        InitializeObjectAttributes(
+            &objattrs, &uni, OBJ_CASE_INSENSITIVE, FileHandle, NULL);
 
-        FILE_ON_CLOSE* on_close = map_get(&File_HandleOnClose, FileHandle);
-        if (!on_close) {
-            on_close = map_insert(&File_HandleOnClose, FileHandle, NULL, sizeof(FILE_ON_CLOSE));
+        //
+        // check if the call to File_NtDeleteFileImpl from the delete handler is expected to fail 
+        // and return the apropriate error
+        //
+
+        FILE_NETWORK_OPEN_INFORMATION info;
+        if (NT_SUCCESS(__sys_NtQueryFullAttributesFile(&objattrs, &info)) && ((info.FileAttributes & FILE_ATTRIBUTE_READONLY) != 0)) {
+
+            status = STATUS_CANNOT_DELETE;
+        } else {
+
+            EnterCriticalSection(&File_HandleOnClose_CritSec);
+
+            FILE_ON_CLOSE* on_close = map_get(&File_HandleOnClose, FileHandle);
+            if (!on_close) {
+                on_close = map_insert(&File_HandleOnClose, FileHandle, NULL, sizeof(FILE_ON_CLOSE));
+            }
+
+            on_close->DeleteOnClose = DeleteOnClose;
+
+            LeaveCriticalSection(&File_HandleOnClose_CritSec);
         }
 
-        on_close->DeleteOnClose = DeleteOnClose;
+	    /*
+        if (DosPath) {
+            objattrs.RootDirectory = NULL;
+            RtlInitUnicodeString(&uni, DosPath);
+        }
 
-        LeaveCriticalSection(&File_HandleOnClose_CritSec);
+        status = File_NtDeleteFileImpl(&objattrs);
+	    */
+
+        IoStatusBlock->Status = 0;
+        IoStatusBlock->Information = 8;
     }
+
+    //if (DosPath)
+    //    Dll_Free(DosPath);
 
     SetLastError(LastError);
     return status;

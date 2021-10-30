@@ -155,7 +155,7 @@ static void Com_Trace(
     ULONG ProcNum, HRESULT hr);
 
 static void Com_Trace2(
-    const WCHAR* TraceType, REFCLSID rclsid, REFIID riid,
+    const WCHAR* TraceType, const WCHAR* pszName, REFCLSID rclsid, REFIID riid,
     ULONG ProcNum, ULONG clsctx, HRESULT hr, ULONG monflag);
 
 static void Com_Monitor(REFCLSID rclsid, ULONG monflag);
@@ -251,6 +251,7 @@ P_WindowsGetStringRawBuffer __sys_WindowsGetStringRawBuffer = NULL;
 // Variables
 //---------------------------------------------------------------------------
 
+BOOLEAN Ipc_OpenCOM = FALSE;
 
 static ULONG Com_NumOpenClsids = -1;
 static GUID *Com_OpenClsids = NULL;
@@ -406,6 +407,9 @@ _FX void Com_LoadClsidList(const WCHAR* setting, GUID** pClsids, ULONG* pNumClsi
 _FX BOOLEAN SbieDll_IsOpenClsid(
     REFCLSID rclsid, ULONG clsctx, const WCHAR *BoxName)
 {
+    ULONG index;
+    GUID *guid;
+
     static const GUID CLSID_WinMgmt = {
         0x8BC3F05E, 0xD86B, 0x11D0,
                         { 0xA0, 0x75, 0x00, 0xC0, 0x4F, 0xB6, 0x88, 0x20 } };
@@ -422,10 +426,15 @@ _FX BOOLEAN SbieDll_IsOpenClsid(
         0x0358B920, 0x0AC7, 0x461F,
                         { 0x98, 0xF4, 0x58, 0xE3, 0x2C, 0xD8, 0x91, 0x48 } };
 
-    if (clsctx & CLSCTX_LOCAL_SERVER) {
+    //
+    // open the null clsid to open all
+    //
 
-        ULONG index;
-        GUID *guid;
+    //static const GUID CLSID_Null = {
+    //    0x00000000, 0x0000, 0x0000,
+    //                    { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 } };
+
+    if (clsctx & CLSCTX_LOCAL_SERVER) {
 
         //
         // check against list of built-in CLSID exclusions
@@ -439,24 +448,25 @@ _FX BOOLEAN SbieDll_IsOpenClsid(
 
             return TRUE;
         }
-
-        //
-        // initialize list of user-configured CLSID exclusions
-        //
-
-        static const WCHAR* setting = L"OpenClsid";
-        Com_LoadClsidList(setting , &Com_OpenClsids, &Com_NumOpenClsids, BoxName);
-
-        //
-        // check against list of user-configured CLSID exclusions
-        //
-
-        for (index = 0; index < Com_NumOpenClsids; ++index) {
-            guid = &Com_OpenClsids[index];
-            if (memcmp(guid, rclsid, sizeof(GUID)) == 0)
-                return TRUE;
-        }
     }
+
+    //
+    // initialize list of user-configured CLSID exclusions
+    //
+
+    static const WCHAR* setting = L"OpenClsid";
+    Com_LoadClsidList(setting , &Com_OpenClsids, &Com_NumOpenClsids, BoxName);
+
+    //
+    // check against list of user-configured CLSID exclusions
+    //
+
+    for (index = 0; index < Com_NumOpenClsids; ++index) {
+        guid = &Com_OpenClsids[index];
+        if (memcmp(guid, rclsid, sizeof(GUID)) == 0 /*|| memcmp(guid, &CLSID_Null, sizeof(GUID)) == 0*/)
+            return TRUE;
+    }
+    
 
     if (Com_IsFirewallClsid(rclsid, BoxName))
         return TRUE;
@@ -579,11 +589,12 @@ _FX HRESULT Com_CoGetClassObject(
 
     if (Com_IsClosedClsid(rclsid)) {
         *ppv = NULL;
-        Com_Monitor(rclsid, MONITOR_DENY);
+        Com_Trace2(TraceType, NULL, rclsid, riid, 0, clsctx, 0, MONITOR_DENY);
+        if (!Com_TraceFlag) Com_Monitor(rclsid, MONITOR_DENY);
         return E_ACCESSDENIED;
     }
 
-    if ((! pServerInfo) && SbieDll_IsOpenClsid(rclsid, clsctx, NULL)) {
+    if (!Ipc_OpenCOM && (! pServerInfo) && SbieDll_IsOpenClsid(rclsid, clsctx, NULL)) {
 
         hr = Com_IClassFactory_New(rclsid, NULL, ppv);
 
@@ -599,8 +610,8 @@ _FX HRESULT Com_CoGetClassObject(
         hr = __sys_CoGetClassObject(rclsid, clsctx, pServerInfo, riid, ppv);
     }
 
-    Com_Trace2(TraceType, rclsid, riid, 0, clsctx, hr, monflag);
-    if (clsctx & CLSCTX_LOCAL_SERVER) {
+    Com_Trace2(TraceType, NULL, rclsid, riid, 0, clsctx, hr, monflag);
+    if ((clsctx & CLSCTX_LOCAL_SERVER) != 0 || monflag) {
         if(!Com_TraceFlag) Com_Monitor(rclsid, monflag);
     }
 
@@ -623,10 +634,12 @@ _FX HRESULT Com_CoGetObject(
     ULONG monflag = 0;
     BOOLEAN IsOpenClsid = FALSE;
 
-    if (_wcsnicmp(pszName, L"Elevation:Administrator!new:", 28) == 0) {
-        if (__sys_IIDFromString(pszName + 28, &clsid) == 0) {
-            if (SbieDll_IsOpenClsid(&clsid, CLSCTX_LOCAL_SERVER, NULL))
-                IsOpenClsid = TRUE;
+    if (!Ipc_OpenCOM) {
+        if (_wcsnicmp(pszName, L"Elevation:Administrator!new:", 28) == 0) {
+            if (__sys_IIDFromString(pszName + 28, &clsid) == 0) {
+                if (SbieDll_IsOpenClsid(&clsid, CLSCTX_LOCAL_SERVER, NULL))
+                    IsOpenClsid = TRUE;
+            }
         }
     }
 
@@ -651,7 +664,7 @@ _FX HRESULT Com_CoGetObject(
         hr = __sys_CoGetObject(pszName, pBindOptions, riid, ppv);
     }
 
-    Com_Trace2(TraceType, &clsid, riid, 0, 0, hr, monflag);
+    Com_Trace2(TraceType, pszName, NULL, riid, 0, 0, hr, monflag);
     if (!Com_TraceFlag) Com_Monitor(&clsid, monflag);
 
     return hr;
@@ -673,11 +686,12 @@ _FX HRESULT Com_CoCreateInstance(
 
     if (Com_IsClosedClsid(rclsid)) {
         *ppv = NULL;
-        Com_Monitor(rclsid, MONITOR_DENY);
+        Com_Trace2(TraceType, NULL, rclsid, riid, 0, clsctx, 0, MONITOR_DENY);
+        if (!Com_TraceFlag) Com_Monitor(rclsid, MONITOR_DENY);
         return E_ACCESSDENIED;
     }
 
-    if (SbieDll_IsOpenClsid(rclsid, clsctx, NULL)) {
+    if (!Ipc_OpenCOM && SbieDll_IsOpenClsid(rclsid, clsctx, NULL)) {
 
         hr = Com_IClassFactory_New(rclsid, NULL, (void **)&pFactory);
 
@@ -699,8 +713,8 @@ _FX HRESULT Com_CoCreateInstance(
         hr = __sys_CoCreateInstance(rclsid, pUnkOuter, clsctx, riid, ppv);
     }
 
-    Com_Trace2(TraceType, rclsid, riid, 0, clsctx, hr, monflag);
-    if (clsctx & CLSCTX_LOCAL_SERVER) {
+    Com_Trace2(TraceType, NULL, rclsid, riid, 0, clsctx, hr, monflag);
+    if ((clsctx & CLSCTX_LOCAL_SERVER) != 0 || monflag) {
         if (!Com_TraceFlag) Com_Monitor(rclsid, monflag);
     }
 
@@ -746,7 +760,8 @@ _FX HRESULT Com_CoCreateInstanceEx(
     //
 
     if (Com_IsClosedClsid(rclsid)) {
-        Com_Monitor(rclsid, MONITOR_DENY);
+        Com_Trace2(TraceType, NULL, rclsid, NULL, 0, clsctx, 0, MONITOR_DENY);
+        if (!Com_TraceFlag) Com_Monitor(rclsid, MONITOR_DENY);
         return E_ACCESSDENIED;
     }
 
@@ -765,7 +780,7 @@ _FX HRESULT Com_CoCreateInstanceEx(
     // otherwise normal processing
     //
 
-    if (SbieDll_IsOpenClsid(rclsid, clsctx, NULL)) {
+    if (!Ipc_OpenCOM && SbieDll_IsOpenClsid(rclsid, clsctx, NULL)) {
 
         hr = Com_IClassFactory_New(rclsid, NULL, (void **)&pFactory);
         if (SUCCEEDED(hr)) {
@@ -811,8 +826,8 @@ _FX HRESULT Com_CoCreateInstanceEx(
     
     for (i = 0; i < cmq; ++i) {
         MULTI_QI *mqi = &pmqs[i];
-        Com_Trace2(TraceType, rclsid, mqi->pIID, 0, clsctx, mqi->hr, monflag);
-        if (clsctx & CLSCTX_LOCAL_SERVER) {
+        Com_Trace2(TraceType, NULL, rclsid, mqi->pIID, 0, clsctx, mqi->hr, monflag);
+        if ((clsctx & CLSCTX_LOCAL_SERVER) != 0 || monflag) {
             if (!Com_TraceFlag) Com_Monitor(rclsid, monflag);
         }
     }
@@ -1343,17 +1358,23 @@ _FX BOOLEAN Com_Init_ComBase(HMODULE module)
     GETPROCADDR_SYS(CoTaskMemAlloc);
     GETPROCADDR_SYS(IIDFromString);
 
-    if (!SbieDll_IsOpenCOM()) {
+    if (SbieDll_IsOpenCOM()
+    // DisableComProxy BEGIN
+    || SbieApi_QueryConfBool(NULL, L"DisableComProxy", FALSE))
+    // DisableComProxy END
+        Ipc_OpenCOM = TRUE;
+    
+    
+    SBIEDLL_HOOK(Com_, CoGetClassObject);
+    if (!Dll_SkipHook(L"cocreate")) {
+        SBIEDLL_HOOK(Com_, CoCreateInstance);
+        SBIEDLL_HOOK(Com_, CoCreateInstanceEx);
+    }
 
-        SBIEDLL_HOOK(Com_, CoGetClassObject);
-        if (!Dll_SkipHook(L"cocreate")) {
-            SBIEDLL_HOOK(Com_, CoCreateInstance);
-            SBIEDLL_HOOK(Com_, CoCreateInstanceEx);
-        }
-
+    if (!Ipc_OpenCOM) {
         if (Dll_OsBuild >= 8400) {
             if (!Com_Hook_CoUnmarshalInterface_W8(
-                (UCHAR *)CoUnmarshalInterface))
+                (UCHAR*)CoUnmarshalInterface))
                 return FALSE;
         }
         else {
@@ -1361,7 +1382,7 @@ _FX BOOLEAN Com_Init_ComBase(HMODULE module)
         }
 
         SBIEDLL_HOOK(Com_, CoMarshalInterface);
-        SbieDll_IsOpenClsid(&IID_IUnknown, CLSCTX_LOCAL_SERVER, NULL);
+        SbieDll_IsOpenClsid(&IID_IUnknown, CLSCTX_LOCAL_SERVER, NULL); // trigger list loading
     }
 
     if (Dll_OsBuild >= 8400) { // win8 and above
@@ -1372,12 +1393,10 @@ _FX BOOLEAN Com_Init_ComBase(HMODULE module)
         }
     }
 
-    {
-        // If there are any ClsidTrace options set, then output this debug string
-        WCHAR wsTraceOptions[4];
-        if (SbieApi_QueryConf(NULL, L"ClsidTrace", 0, wsTraceOptions, sizeof(wsTraceOptions)) == STATUS_SUCCESS && wsTraceOptions[0] != L'\0')
-            Com_TraceFlag = TRUE;
-    }
+    // If there are any ClsidTrace options set, then output this debug string
+    WCHAR wsTraceOptions[4];
+    if (SbieApi_QueryConf(NULL, L"ClsidTrace", 0, wsTraceOptions, sizeof(wsTraceOptions)) == STATUS_SUCCESS && wsTraceOptions[0] != L'\0')
+        Com_TraceFlag = TRUE;
 
     return TRUE;
 }
@@ -1408,10 +1427,7 @@ _FX BOOLEAN Com_Init_Ole32(HMODULE module)
     // other functions are still in ole32, even on Windows 8
     //
 
-    if (! SbieDll_IsOpenCOM()) {
-
-        SBIEDLL_HOOK(Com_,CoGetObject);
-    }
+    SBIEDLL_HOOK(Com_,CoGetObject);
 
     return TRUE;
 }
@@ -3296,8 +3312,7 @@ _FX void Com_Trace_Guid(
     }
 
     if (rc != 0) {
-        ptr[0] = L'?';
-        ptr[1] = L'\0';
+        wcscpy(ptr, L"IUnknown");
     }
 }
 
@@ -3311,11 +3326,11 @@ _FX void Com_Trace(
     const WCHAR* TraceType, REFCLSID rclsid, REFIID riid,
     ULONG ProcNum, HRESULT hr)
 {
-    Com_Trace2(TraceType, rclsid, riid, ProcNum, 0, hr, MONITOR_TRACE);
+    Com_Trace2(TraceType, NULL, rclsid, riid, ProcNum, 0, hr, MONITOR_TRACE);
 }
 
 _FX void Com_Trace2(
-    const WCHAR* TraceType, REFCLSID rclsid, REFIID riid,
+    const WCHAR* TraceType, const WCHAR* pszName, REFCLSID rclsid, REFIID riid,
     ULONG ProcNum, ULONG clsctx, HRESULT hr, ULONG monflag)
 {
     WCHAR *text;
@@ -3327,16 +3342,27 @@ _FX void Com_Trace2(
     text = Com_Alloc(1024 * sizeof(WCHAR));
     ptr = text + Sbie_snwprintf(text, 1024, L"COM <%08X> %s <%08X> ", clsctx, TraceType, hr);
 
+    if (pszName) {
+        wcscpy(ptr, L"NAME: ");
+        ptr += 6; // wcslen(ptr);
+        wcscpy(ptr, pszName);
+        ptr += wcslen(ptr);
+    }
+
     if (rclsid) {
+        wcscpy(ptr, L"CLSID: ");
+        ptr += 7; // wcslen(ptr);
         Com_Trace_Guid(ptr, rclsid, L"CLSID");
         ptr += wcslen(ptr);
     }
 
     if (riid) {
         if (rclsid) {
-            *ptr = L' ';
-            ++ptr;
+            *ptr++ = L';';
+            *ptr++ = L' ';
         }
+        wcscpy(ptr, L"Interface: ");
+        ptr += 11; // wcslen(ptr);
         Com_Trace_Guid(ptr, riid, L"Interface");
         ptr += wcslen(ptr);
 
@@ -3496,10 +3522,10 @@ _FX HRESULT Com_RoGetActivationFactory(HSTRING activatableClassId, REFIID  iid, 
     const wchar_t* strClassId = __sys_WindowsGetStringRawBuffer(activatableClassId, NULL);
 
     if (Com_IsClosedRT(strClassId)) {
-        SbieApi_MonitorPut(MONITOR_COMCLASS | MONITOR_DENY, strClassId);
+        SbieApi_MonitorPut(MONITOR_RTCLASS | MONITOR_DENY, strClassId);
         return E_ACCESSDENIED;
     }
 
-    SbieApi_MonitorPut(MONITOR_COMCLASS, strClassId);
+    SbieApi_MonitorPut(MONITOR_RTCLASS, strClassId);
     return __sys_RoGetActivationFactory(activatableClassId, iid, factory);
 }

@@ -1,8 +1,8 @@
 name: CI
 
 on:
-#  workflow_dispatch:
-#    branches: [ master, 0.8.x ]
+  workflow_dispatch:
+    branches: [ master, dev ]
   push:
     branches: [ master ]
   pull_request:
@@ -27,6 +27,9 @@ jobs:
 
       - name: Setup msbuild
         uses: microsoft/setup-msbuild@v1
+
+    #  - name: Do Tests
+    #    run: .\TestCI.cmd
 
     #  - name: Build Sandboxie
     #    run: msbuild /t:build Sandboxie\Sandbox.sln /p:Configuration="SbieRelease" /p:Platform=${{ matrix.platform }}

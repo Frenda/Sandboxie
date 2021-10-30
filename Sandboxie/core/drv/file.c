@@ -73,6 +73,7 @@ typedef struct _BLOCKED_DLL {
 } BLOCKED_DLL;
 
 
+
 //---------------------------------------------------------------------------
 // Functions
 //---------------------------------------------------------------------------
@@ -731,7 +732,7 @@ _FX BOOLEAN File_InitPaths(PROCESS *proc,
     // the Windows compatibility (shim) DLLs to be loaded
     //
 
-    if (proc->image_sbie) {
+    if (proc->image_sbie && !proc->is_start_exe) {
 
         static const WCHAR *_ShimEng =
                                 L"%SystemRoot%\\System32\\shimeng.dll";
@@ -1422,26 +1423,26 @@ _FX NTSTATUS File_Generic_MyParseProc(
 
         if ((! proc->sbiedll_loaded) && status == STATUS_SUCCESS
                 && (CreateOptions & FILE_DIRECTORY_FILE) == 0) {
-
+        
             WCHAR *backslash = wcsrchr(path, L'\\');
             if (backslash && File_IsDelayLoadDll(proc, backslash + 1)) {
-
+        
                 ULONG len = sizeof(BLOCKED_DLL) + path_len * sizeof(WCHAR);
                 BLOCKED_DLL *blk = Mem_Alloc(proc->pool, len);
                 if (blk) {
-
+        
                     blk->path_len = path_len;
                     wmemcpy(blk->path, path, path_len + 1);
-
+        
                     KeRaiseIrql(APC_LEVEL, &irql);
                     ExAcquireResourceExclusiveLite(proc->file_lock, TRUE);
-
+        
                     List_Insert_After(&proc->blocked_dlls, NULL, blk);
-
+        
                     ExReleaseResourceLite(proc->file_lock);
                     KeLowerIrql(irql);
                 }
-
+        
                 status = STATUS_OBJECT_NAME_NOT_FOUND;
             }
         }
@@ -1523,7 +1524,7 @@ skip_due_to_home_folder:
             if (!IsBoxedPath) {
                 if (ShouldMonitorAccess == TRUE)
                     mon_type |= MONITOR_DENY;
-                else
+                else if (write_access)
                     mon_type |= MONITOR_OPEN;
             }
             if(!IsPipeDevice && !ShouldMonitorAccess)
