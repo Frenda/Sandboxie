@@ -8,6 +8,108 @@
 #include "../MiscHelpers/Common/SettingsWidgets.h"
 #include "Helpers/WinAdmin.h"
 
+class NoEditDelegate : public QStyledItemDelegate {
+public:
+	NoEditDelegate(QObject* parent = 0) : QStyledItemDelegate(parent) {}
+
+	virtual QWidget* createEditor(QWidget* parent, const QStyleOptionViewItem& option, const QModelIndex& index) const {
+		return NULL;
+	}
+};
+
+class QTreeWidgetHacker : public QTreeWidget
+{
+public:
+	friend class ProgramsDelegate;
+	//QModelIndex indexFromItem(const QTreeWidgetItem *item, int column = 0) const;
+	//QTreeWidgetItem *itemFromIndex(const QModelIndex &index) const;
+};
+
+class ProgramsDelegate : public QStyledItemDelegate {
+public:
+	ProgramsDelegate(COptionsWindow* pOptions, QTreeWidget* pTree, int Column, QObject* parent = 0) : QStyledItemDelegate(parent) { m_pOptions = pOptions; m_pTree = pTree; m_Column = Column; }
+
+	virtual QWidget* createEditor(QWidget* parent, const QStyleOptionViewItem& option, const QModelIndex& index) const {
+		QTreeWidgetItem* pItem = ((QTreeWidgetHacker*)m_pTree)->itemFromIndex(index);
+		if (!pItem->data(index.column(), Qt::UserRole).isValid())
+			return NULL;
+
+		if (m_Column == -1 || pItem->data(m_Column, Qt::UserRole).toInt() == COptionsWindow::eProcess) {
+			QComboBox* pBox = new QComboBox(parent);
+			pBox->setEditable(true);
+			foreach(const QString Group, m_pOptions->GetCurrentGroups()) {
+				QString GroupName = Group.mid(1, Group.length() - 2);
+				pBox->addItem(tr("Group: %1").arg(GroupName), Group);
+			}
+			foreach(const QString & Name, m_pOptions->GetPrograms())
+				pBox->addItem(Name, Name);
+
+			connect(pBox->lineEdit(), &QLineEdit::textEdited, [pBox](const QString& text){
+				/*if (pBox->currentIndex() != -1) {
+					int pos = pBox->lineEdit()->cursorPosition();
+					pBox->setCurrentIndex(-1);
+					pBox->setCurrentText(text);
+					pBox->lineEdit()->setCursorPosition(pos);
+				}*/
+				pBox->setProperty("value", text);
+			});
+
+			connect(pBox, qOverload<int>(&QComboBox::currentIndexChanged), [pBox](int index){
+				if (index != -1)
+					pBox->setProperty("value", pBox->itemData(index));
+			});
+
+			return pBox;
+		}
+		else if (pItem->data(0, Qt::UserRole).toInt() == COptionsWindow::ePath)
+			return QStyledItemDelegate::createEditor(parent, option, index);
+		else
+			return NULL;
+	}
+
+	virtual void setEditorData(QWidget* editor, const QModelIndex& index) const {
+		QComboBox* pBox = qobject_cast<QComboBox*>(editor);
+		if (pBox) {
+			QTreeWidgetItem* pItem = ((QTreeWidgetHacker*)m_pTree)->itemFromIndex(index);
+			QString Program = pItem->data(index.column(), Qt::UserRole).toString();
+
+			pBox->setProperty("value", Program);
+
+			int Index = pBox->findData(Program);
+			pBox->setCurrentIndex(Index);
+			if (Index == -1)
+				pBox->setCurrentText(Program);
+		}
+		else
+			QStyledItemDelegate::setEditorData(editor, index);
+	}
+
+	virtual void setModelData(QWidget* editor, QAbstractItemModel* model, const QModelIndex& index) const {
+
+		QComboBox* pBox = qobject_cast<QComboBox*>(editor);
+		if (pBox) {
+			QTreeWidgetItem* pItem = ((QTreeWidgetHacker*)m_pTree)->itemFromIndex(index);
+			QString Value = pBox->property("value").toString();
+			pItem->setText(index.column(), pBox->currentText());
+			//QString Text = pBox->currentText();
+			//QVariant Data = pBox->currentData();
+			pItem->setData(index.column(), Qt::UserRole, Value);
+		}
+
+		QLineEdit* pEdit = qobject_cast<QLineEdit*>(editor);
+		if (pEdit) {
+			QTreeWidgetItem* pItem = ((QTreeWidgetHacker*)m_pTree)->itemFromIndex(index);
+			pItem->setText(index.column(), pEdit->text());
+			pItem->setData(index.column(), Qt::UserRole, pEdit->text());
+		}
+	}
+
+protected:
+	COptionsWindow* m_pOptions;
+	QTreeWidget* m_pTree;
+	int m_Column;
+};
+
 
 COptionsWindow::COptionsWindow(const QSharedPointer<CSbieIni>& pBox, const QString& Name, QWidget *parent)
 	: QDialog(parent)
@@ -17,6 +119,8 @@ COptionsWindow::COptionsWindow(const QSharedPointer<CSbieIni>& pBox, const QStri
 	m_Template = pBox->GetName().left(9).compare("Template_", Qt::CaseInsensitive) == 0;
 	bool ReadOnly = /*pBox->GetAPI()->IsConfigLocked() ||*/ (m_Template && pBox->GetName().mid(9, 6).compare("Local_", Qt::CaseInsensitive) != 0);
 	
+	m_HoldChange = false;
+
 	QSharedPointer<CSandBoxPlus> pBoxPlus = m_pBox.objectCast<CSandBoxPlus>();
 	if (!pBoxPlus.isNull())
 		m_Programs = pBoxPlus->GetRecentPrograms();
@@ -91,6 +195,8 @@ COptionsWindow::COptionsWindow(const QSharedPointer<CSbieIni>& pBox, const QStri
 	connect(ui.btnAddProg, SIGNAL(clicked(bool)), this, SLOT(OnAddProg()));
 	connect(ui.btnDelProg, SIGNAL(clicked(bool)), this, SLOT(OnDelProg()));
 	connect(ui.chkShowGroupTmpl, SIGNAL(clicked(bool)), this, SLOT(OnShowGroupTmpl()));
+	ui.treeGroups->setItemDelegateForColumn(0, new ProgramsDelegate(this, ui.treeGroups, -1, this));
+	connect(ui.treeGroups, SIGNAL(itemChanged(QTreeWidgetItem *, int)), this, SLOT(OnGroupsChanged(QTreeWidgetItem *, int)));
 	//
 
 	// Force
@@ -98,6 +204,10 @@ COptionsWindow::COptionsWindow(const QSharedPointer<CSbieIni>& pBox, const QStri
 	connect(ui.btnForceDir, SIGNAL(clicked(bool)), this, SLOT(OnForceDir()));
 	connect(ui.btnDelForce, SIGNAL(clicked(bool)), this, SLOT(OnDelForce()));
 	connect(ui.chkShowForceTmpl, SIGNAL(clicked(bool)), this, SLOT(OnShowForceTmpl()));
+	//ui.treeForced->setEditTriggers(QAbstractItemView::DoubleClicked);
+	ui.treeForced->setItemDelegateForColumn(0, new NoEditDelegate(this));
+	ui.treeForced->setItemDelegateForColumn(1, new ProgramsDelegate(this, ui.treeForced, 0, this));
+	connect(ui.treeForced, SIGNAL(itemChanged(QTreeWidgetItem *, int)), this, SLOT(OnForcedChanged(QTreeWidgetItem *, int)));
 	//
 
 	// Stop
@@ -105,6 +215,8 @@ COptionsWindow::COptionsWindow(const QSharedPointer<CSbieIni>& pBox, const QStri
 	connect(ui.btnAddLeader, SIGNAL(clicked(bool)), this, SLOT(OnAddLeader()));
 	connect(ui.btnDelStopProg, SIGNAL(clicked(bool)), this, SLOT(OnDelStopProg()));
 	connect(ui.chkShowStopTmpl, SIGNAL(clicked(bool)), this, SLOT(OnShowStopTmpl()));
+	ui.treeStop->setItemDelegateForColumn(1, new ProgramsDelegate(this, ui.treeStop, -1, this));
+	connect(ui.treeStop, SIGNAL(itemChanged(QTreeWidgetItem *, int)), this, SLOT(OnStopChanged(QTreeWidgetItem *, int)));
 	//
 
 	// Start
@@ -114,15 +226,13 @@ COptionsWindow::COptionsWindow(const QSharedPointer<CSbieIni>& pBox, const QStri
 	connect(ui.btnAddStartProg, SIGNAL(clicked(bool)), this, SLOT(OnAddStartProg()));
 	connect(ui.btnDelStartProg, SIGNAL(clicked(bool)), this, SLOT(OnDelStartProg()));
 	connect(ui.chkStartBlockMsg, SIGNAL(clicked(bool)), this, SLOT(OnStartChanged()));
+	ui.treeStart->setItemDelegateForColumn(0, new ProgramsDelegate(this, ui.treeStart, -1, this));
+	connect(ui.treeStart, SIGNAL(itemChanged(QTreeWidgetItem *, int)), this, SLOT(OnStartChanged(QTreeWidgetItem *, int)));
 	//
 
 	CreateNetwork();
 
 	CreateAccess();
-
-	// Resource Access
-	connect(ui.chkCloseForBox, SIGNAL(clicked(bool)), this, SLOT(OnAccessChanged()));
-	//
 
 	// Recovery
 	connect(ui.chkAutoRecovery, SIGNAL(clicked(bool)), this, SLOT(OnRecoveryChanged()));
@@ -152,6 +262,8 @@ COptionsWindow::COptionsWindow(const QSharedPointer<CSbieIni>& pBox, const QStri
 	connect(ui.btnEditIni, SIGNAL(clicked(bool)), this, SLOT(OnEditIni()));
 	connect(ui.btnSaveIni, SIGNAL(clicked(bool)), this, SLOT(OnSaveIni()));
 	connect(ui.btnCancelEdit, SIGNAL(clicked(bool)), this, SLOT(OnCancelEdit()));
+	connect(ui.txtIniSection, SIGNAL(textChanged()), this, SLOT(OnOptChanged()));
+
 	//
 
 	connect(ui.buttonBox->button(QDialogButtonBox::Ok), SIGNAL(clicked(bool)), this, SLOT(ok()));
@@ -162,7 +274,6 @@ COptionsWindow::COptionsWindow(const QSharedPointer<CSbieIni>& pBox, const QStri
 	{
 		ui.btnEditIni->setEnabled(false);
 		ui.buttonBox->button(QDialogButtonBox::Ok)->setEnabled(false);
-		ui.buttonBox->button(QDialogButtonBox::Apply)->setEnabled(false);
 	}
 
 	if (theAPI->IsRunningAsAdmin())
@@ -174,6 +285,8 @@ COptionsWindow::COptionsWindow(const QSharedPointer<CSbieIni>& pBox, const QStri
 		ui.lblAdmin->setVisible(false);
 
 	LoadConfig();
+
+	ui.buttonBox->button(QDialogButtonBox::Apply)->setEnabled(false);
 
 	ui.treeAccess->viewport()->installEventFilter(this);
 	ui.treeINet->viewport()->installEventFilter(this);
@@ -204,6 +317,12 @@ COptionsWindow::COptionsWindow(const QSharedPointer<CSbieIni>& pBox, const QStri
 	if (!Columns.isEmpty()) ui.treeRecovery->header()->restoreState(Columns);
 	Columns = theConf->GetBlob("OptionsWindow/Templates_Columns");
 	if (!Columns.isEmpty()) ui.treeTemplates->header()->restoreState(Columns);
+}
+
+void COptionsWindow::OnOptChanged() {
+	if (m_HoldChange)
+		return;
+	ui.buttonBox->button(QDialogButtonBox::Apply)->setEnabled(true);
 }
 
 COptionsWindow::~COptionsWindow()
@@ -309,6 +428,7 @@ void COptionsWindow::LoadConfig()
 
 	LoadTemplates();
 	
+	UpdateBoxType();
 }
 
 void COptionsWindow::WriteAdvancedCheck(QCheckBox* pCheck, const QString& Name, const QString& Value)
@@ -327,6 +447,9 @@ void COptionsWindow::WriteAdvancedCheck(QCheckBox* pCheck, const QString& Name, 
 {
 	//if (pCheck->checkState() == Qt::PartiallyChecked)
 	//	return;
+
+	if (!pCheck->isEnabled())
+		return;
 
 	SB_STATUS Status;
 	if (pCheck->checkState() == Qt::Checked)
@@ -435,6 +558,8 @@ void COptionsWindow::apply()
 	UpdateCurrentTab();
 
 	emit OptionsChanged();
+
+	ui.buttonBox->button(QDialogButtonBox::Apply)->setEnabled(false);
 }
 
 void COptionsWindow::ok()
@@ -485,9 +610,9 @@ QString COptionsWindow::SelectProgram(bool bOrGroup)
 
 	if (bOrGroup)
 	{
-		for (int i = 0; i < ui.treeGroups->topLevelItemCount(); i++) {
-			QTreeWidgetItem* pItem = ui.treeGroups->topLevelItem(i);
-			progDialog.addItem(tr("Group: %1").arg(pItem->text(0)), pItem->data(0, Qt::UserRole).toString());
+		foreach(const QString Group, GetCurrentGroups()){
+			QString GroupName = Group.mid(1, Group.length() - 2);
+			progDialog.addItem(tr("Group: %1").arg(GroupName), Group);
 		}
 	}
 
@@ -534,7 +659,9 @@ void COptionsWindow::UpdateCurrentTab()
 			ui.radStartExcept->setChecked(true);
 		else
 			ui.radStartAll->setChecked(true);
+		ui.treeStart->clear();
 		CopyGroupToList("<StartRunAccess>", ui.treeStart);
+		CopyGroupToList("<StartRunAccessDisabled>", ui.treeStart, true);
 
 		OnRestrictStart();
 	}
@@ -548,7 +675,9 @@ void COptionsWindow::UpdateCurrentTab()
 	}
 	else if (ui.tabs->currentWidget() == ui.tabAdvanced)
 	{
-		if (GetAccessEntry(eWnd, "", eDirect, "*") != NULL)
+		ui.chkOpenCOM->setChecked(GetAccessEntry(eIPC, "", eOpen, "\\RPC Control\\epmapper") != NULL);
+
+		if (GetAccessEntry(eWnd, "", eOpen, "*") != NULL)
 		{
 			ui.chkNoWindowRename->setEnabled(false);
 			ui.chkNoWindowRename->setChecked(true);
@@ -556,7 +685,7 @@ void COptionsWindow::UpdateCurrentTab()
 		else
 		{
 			ui.chkNoWindowRename->setEnabled(true);
-			ui.chkNoWindowRename->setChecked(GetAccessEntry(eWnd, "", eDirect, "#") != NULL);
+			ui.chkNoWindowRename->setChecked(GetAccessEntry(eWnd, "", eOpen, "#") != NULL);
 		}
 	}
 }
@@ -609,7 +738,9 @@ void COptionsWindow::LoadIniSection()
 	else
 		Section = m_pBox->GetAPI()->SbieIniGetEx(m_pBox->GetName(), "");
 
+	m_HoldChange = true;
 	ui.txtIniSection->setPlainText(Section);
+	m_HoldChange = false;
 }
 
 void COptionsWindow::SaveIniSection()

@@ -53,10 +53,11 @@ double CSelectBoxWindow__GetBoxOrder(const QMap<QString, QStringList>& Groups, c
 	return 1000000000;
 }
 
-CSelectBoxWindow::CSelectBoxWindow(const QStringList& Commands, const QString& BoxName, QWidget *parent)
+CSelectBoxWindow::CSelectBoxWindow(const QStringList& Commands, const QString& BoxName, const QString& WrkDir, QWidget *parent)
 	: QDialog(parent)
 {
 	m_Commands = Commands;
+	m_WrkDir = WrkDir;
 
 	Qt::WindowFlags flags = windowFlags();
 	flags |= Qt::CustomizeWindowHint;
@@ -119,7 +120,7 @@ CSelectBoxWindow::CSelectBoxWindow(const QStringList& Commands, const QString& B
 		QTreeWidgetItem* pItem = new QTreeWidgetItem();
 		pItem->setText(0, pBox->GetName().replace("_", " "));
 		pItem->setData(0, Qt::UserRole, pBox->GetName());
-		pItem->setData(0, Qt::DecorationRole, theGUI->GetBoxIcon(pBox->GetActiveProcessCount() > 0, pBoxEx->GetType()));
+		pItem->setData(0, Qt::DecorationRole, theGUI->GetBoxIcon(pBoxEx->GetType(), pBox->GetActiveProcessCount()));
 		if (pParent)
 			pParent->addChild(pItem);
 		else
@@ -179,7 +180,7 @@ void CSelectBoxWindow::OnRun()
 
 	//QList<SB_STATUS> Results;
 	foreach(const QString & Command, m_Commands) {
-		theAPI->RunStart(BoxName, Command, NULL, ui.chkAdmin->isChecked());
+		theAPI->RunStart(BoxName, Command, ui.chkAdmin->isChecked(), m_WrkDir);
 	}
 	//CSandMan::CheckResults(Results);
 

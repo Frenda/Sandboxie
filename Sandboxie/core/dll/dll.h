@@ -49,7 +49,7 @@ extern __declspec(dllexport) int __CRTDECL Sbie_snprintf(char *_Buffer, size_t C
 #define COPY_NAME_BUFFER        1
 #define TMPL_NAME_BUFFER        2
 #define NAME_BUFFER_COUNT       3
-#define NAME_BUFFER_DEPTH       12
+#define NAME_BUFFER_DEPTH       24
 
 
 #ifdef _WIN64
@@ -254,6 +254,11 @@ extern const WCHAR *Dll_BoxName;
 extern const WCHAR *Dll_ImageName;
 extern const WCHAR *Dll_SidString;
 
+extern const WCHAR *Dll_HomeNtPath;
+extern ULONG Dll_HomeNtPathLen;
+extern const WCHAR *Dll_HomeDosPath;
+//extern ULONG Dll_HomeDosPathLen;
+
 extern const WCHAR *Dll_BoxFilePath;
 extern const WCHAR *Dll_BoxKeyPath;
 extern const WCHAR *Dll_BoxIpcPath;
@@ -356,6 +361,11 @@ void Dll_RefreshPathList(void);
 ULONG SbieDll_MatchPath(WCHAR path_code, const WCHAR *path);
 
 ULONG SbieDll_MatchPath2(WCHAR path_code, const WCHAR *path, BOOLEAN bCheckObjectExists, BOOLEAN bMonitorLog);
+
+void SbieDll_GetReadablePaths(WCHAR path_code, LIST **lists);
+void SbieDll_ReleaseFilePathLock();
+
+BOOLEAN SbieDll_HasReadableSubPath(WCHAR path_code, const WCHAR* TruePath);
 
 #define PATH_OPEN_FLAG      0x10
 #define PATH_CLOSED_FLAG    0x20
@@ -495,6 +505,8 @@ NTSTATUS Key_OpenOrCreateIfBoxed(
 void Key_DeleteValueFromCLSID(
     const WCHAR *Xxxid, const WCHAR *Guid, const WCHAR *ValueName);
 
+void Key_CreateBaseKeys();
+void Key_CreateBaseFolders();
 
 //---------------------------------------------------------------------------
 // Functions (sxs)
@@ -591,6 +603,8 @@ BOOLEAN Secure_IsLocalSystemToken(BOOLEAN CheckThreadToken);
 BOOL Proc_ImpersonateSelf(BOOLEAN Enable);
 
 BOOLEAN Taskbar_SHCore_Init(HMODULE hmodule);
+
+BOOLEAN Win32_Init(HMODULE hmodule);
 
 
 //---------------------------------------------------------------------------
@@ -775,6 +789,8 @@ BOOLEAN Config_MatchImage(
 WCHAR* Config_MatchImageAndGetValue(WCHAR* value, const WCHAR* ImageName, ULONG* pMode);
 
 BOOLEAN Config_InitPatternList(const WCHAR* setting, LIST* list);
+
+VOID Config_FreePatternList(LIST* list);
 
 BOOLEAN Config_String2Bool(const WCHAR* value, BOOLEAN defval);
 

@@ -99,6 +99,19 @@ static NTSTATUS Proc_RtlCreateProcessParametersEx(
     UNICODE_STRING *RuntimeData,
     void *UnknownParameter11);
 
+static NTSTATUS Proc_NtCreateUserProcess(
+    _Out_ PHANDLE ProcessHandle,
+    _Out_ PHANDLE ThreadHandle,
+    _In_ ACCESS_MASK ProcessDesiredAccess,
+    _In_ ACCESS_MASK ThreadDesiredAccess,
+    _In_opt_ POBJECT_ATTRIBUTES ProcessObjectAttributes,
+    _In_opt_ POBJECT_ATTRIBUTES ThreadObjectAttributes,
+    _In_ ULONG ProcessFlags, // PROCESS_CREATE_FLAGS_*
+    _In_ ULONG ThreadFlags, // THREAD_CREATE_FLAGS_*
+    _In_opt_ PVOID ProcessParameters, // PRTL_USER_PROCESS_PARAMETERS
+    _Inout_ PPS_CREATE_INFO CreateInfo,
+    _In_opt_ PPS_ATTRIBUTE_LIST AttributeList);
+
 static BOOL Proc_CreateProcessWithTokenW(
     HANDLE hToken,
     ULONG dwLogonFlags,
@@ -196,6 +209,19 @@ typedef NTSTATUS (*P_RtlCreateProcessParametersEx)(
     UNICODE_STRING *RuntimeData,
     void *UnknownParameter11);
 
+typedef NTSTATUS (*P_NtCreateUserProcess)(
+    _Out_ PHANDLE ProcessHandle,
+    _Out_ PHANDLE ThreadHandle,
+    _In_ ACCESS_MASK ProcessDesiredAccess,
+    _In_ ACCESS_MASK ThreadDesiredAccess,
+    _In_opt_ POBJECT_ATTRIBUTES ProcessObjectAttributes,
+    _In_opt_ POBJECT_ATTRIBUTES ThreadObjectAttributes,
+    _In_ ULONG ProcessFlags, // PROCESS_CREATE_FLAGS_*
+    _In_ ULONG ThreadFlags, // THREAD_CREATE_FLAGS_*
+    _In_opt_ PVOID ProcessParameters, // PRTL_USER_PROCESS_PARAMETERS
+    _Inout_ PPS_CREATE_INFO CreateInfo,
+    _In_opt_ PPS_ATTRIBUTE_LIST AttributeList);
+
 typedef void (*P_ExitProcess)(UINT ExitCode);
 
 typedef UINT (*P_WinExec)(LPCSTR lpCmdLine, UINT uCmdShow);
@@ -254,7 +280,9 @@ static P_CreateProcessInternal      __sys_CreateProcessInternalW    = NULL;
 static P_CreateProcessWithTokenW    __sys_CreateProcessWithTokenW   = NULL;
 
 static P_RtlCreateProcessParametersEx
-                                  __sys_RtlCreateProcessParametersEx = NULL;
+                                    __sys_RtlCreateProcessParametersEx = NULL;
+
+static P_NtCreateUserProcess        __sys_NtCreateUserProcess       = NULL;
 
 static P_ExitProcess                __sys_ExitProcess               = NULL;
 
@@ -287,6 +315,8 @@ static HANDLE Proc_LastCreatedProcessHandle = NULL;
 
 static BOOL     g_boolWasWerFaultLastProcess = FALSE;
 
+BOOL            Dll_ElectronWorkaround = FALSE;
+
 //---------------------------------------------------------------------------
 // Proc_Init
 //---------------------------------------------------------------------------
@@ -297,6 +327,8 @@ _FX BOOLEAN Proc_Init(void)
     P_CreateProcessInternal CreateProcessInternalW;
     ANSI_STRING ansi;
     NTSTATUS status;
+
+    Dll_ElectronWorkaround = SbieApi_QueryConfBool(NULL, L"UseElectronWorkaround", TRUE);
 
     //
     // abort if we should not hook any process creation functions
@@ -323,8 +355,12 @@ _FX BOOLEAN Proc_Init(void)
         P_RtlCreateProcessParametersEx RtlCreateProcessParametersEx =
             (P_RtlCreateProcessParametersEx) GetProcAddress(
                 Dll_Ntdll, "RtlCreateProcessParametersEx");
-
         SBIEDLL_HOOK(Proc_,RtlCreateProcessParametersEx);
+
+        P_NtCreateUserProcess NtCreateUserProcess =
+            (P_NtCreateUserProcess) GetProcAddress(
+                Dll_Ntdll, "NtCreateUserProcess");
+        SBIEDLL_HOOK(Proc_,NtCreateUserProcess);
     }
 
     //
@@ -642,7 +678,7 @@ _FX BOOL Proc_CreateProcessInternalW(
     // Hack: by adding a parameter to the gpu renderer process, we can fix the issue.
     //
 
-    if (Dll_ImageType == DLL_IMAGE_UNSPECIFIED/* || Dll_ImageType == DLL_IMAGE_ELECTRON*/)
+    if ((Dll_ImageType == DLL_IMAGE_UNSPECIFIED/* || Dll_ImageType == DLL_IMAGE_ELECTRON*/) && Dll_ElectronWorkaround)
     {
         if(lpApplicationName && lpCommandLine)
         {
@@ -883,13 +919,19 @@ _FX BOOL Proc_CreateProcessInternalW(
         lpApplicationName = TlsData->proc_image_path;
     }
 
+    // const wchar_t* imageName = L"DcomLaunch.exe";
+    // if ((lpApplicationName && wcsstr(lpApplicationName,imageName) != NULL) || (lpCommandLine && wcsstr(lpCommandLine,imageName) != NULL)) {
+    //    while (!IsDebuggerPresent())
+    //        Sleep(500);
+    //    __debugbreak();
+    //}
 
     //
     // create the new process
     //
 
     // OriginalToken BEGIN
-    if (SbieApi_QueryConfBool(NULL, L"OriginalToken", FALSE))
+    if ((Dll_ProcessFlags & SBIE_FLAG_APP_COMPARTMENT) != 0 || SbieApi_QueryConfBool(NULL, L"OriginalToken", FALSE))
     {
         extern BOOLEAN Scm_MsiServer_Systemless;
         if (Dll_ImageType == DLL_IMAGE_MSI_INSTALLER && Scm_MsiServer_Systemless 
@@ -969,7 +1011,6 @@ _FX BOOL Proc_CreateProcessInternalW(
             }
         }
     }
-
 
     ok = __sys_CreateProcessInternalW(
         NULL, lpApplicationName, lpCommandLine,
@@ -1728,6 +1769,96 @@ _FX NTSTATUS Proc_RtlCreateProcessParametersEx(
 
 
 //---------------------------------------------------------------------------
+// Proc_NtCreateUserProcess
+//---------------------------------------------------------------------------
+
+
+_FX NTSTATUS Proc_NtCreateUserProcess(
+    _Out_ PHANDLE ProcessHandle,
+    _Out_ PHANDLE ThreadHandle,
+    _In_ ACCESS_MASK ProcessDesiredAccess,
+    _In_ ACCESS_MASK ThreadDesiredAccess,
+    _In_opt_ POBJECT_ATTRIBUTES ProcessObjectAttributes,
+    _In_opt_ POBJECT_ATTRIBUTES ThreadObjectAttributes,
+    _In_ ULONG ProcessFlags, // PROCESS_CREATE_FLAGS_*
+    _In_ ULONG ThreadFlags, // THREAD_CREATE_FLAGS_*
+    _In_opt_ PVOID ProcessParameters, // PRTL_USER_PROCESS_PARAMETERS
+    _Inout_ PPS_CREATE_INFO CreateInfo,
+    _In_opt_ PPS_ATTRIBUTE_LIST AttributeList)
+{
+    NTSTATUS status;
+    UNICODE_STRING objname;
+
+    SIZE_T ImageNameIndex = -1;
+    for (SIZE_T i = 0; i < AttributeList->TotalLength; i++) {
+        if (AttributeList->Attributes[i].Attribute == 0x00020005) { // PsAttributeValue(PsAttributeImageName, FALSE, TRUE, FALSE);
+            ImageNameIndex = i;
+            break;
+        }
+    }
+       
+    if (ImageNameIndex != -1) {
+
+        objname.Buffer = (WCHAR*)AttributeList->Attributes[ImageNameIndex].Value;
+        objname.Length = (USHORT)AttributeList->Attributes[ImageNameIndex].Size;
+        objname.MaximumLength = objname.Length + sizeof(wchar_t);
+
+        WCHAR *TruePath;
+        WCHAR *CopyPath;
+        ULONG FileFlags;
+        if (NT_SUCCESS(File_GetName(NULL, &objname, &TruePath, &CopyPath, &FileFlags))) {
+
+            HANDLE FileHandle;
+            OBJECT_ATTRIBUTES objattrs;
+            UNICODE_STRING objname2;
+            IO_STATUS_BLOCK IoStatusBlock;
+
+            RtlInitUnicodeString(&objname2, CopyPath);
+            InitializeObjectAttributes(
+                &objattrs, &objname2, OBJ_CASE_INSENSITIVE, NULL, NULL);
+
+            extern P_NtCreateFile __sys_NtCreateFile;
+            status = __sys_NtCreateFile(
+                &FileHandle, FILE_GENERIC_READ, &objattrs,
+                &IoStatusBlock, NULL, 0, FILE_SHARE_READ,
+                FILE_OPEN, FILE_SYNCHRONOUS_IO_NONALERT, NULL, 0);
+
+            if (NT_SUCCESS(status)) {
+
+                if (SbieDll_TranslateNtToDosPath(CopyPath)) {
+                    wmemmove(CopyPath + 4, CopyPath, wcslen(CopyPath) + sizeof(WCHAR));
+                    wmemcpy(CopyPath, L"\\??\\", 4);
+
+                    AttributeList->Attributes[ImageNameIndex].Value = (ULONG_PTR)CopyPath;
+                    AttributeList->Attributes[ImageNameIndex].Size = wcslen(CopyPath) * sizeof(WCHAR);
+                }
+
+                NtClose(FileHandle);
+            }
+        }
+    }
+
+    status = __sys_NtCreateUserProcess(ProcessHandle,
+        ThreadHandle,
+        ProcessDesiredAccess,
+        ThreadDesiredAccess,
+        ProcessObjectAttributes,
+        ThreadObjectAttributes,
+        ProcessFlags,
+        ThreadFlags,
+        ProcessParameters,
+        CreateInfo,
+        AttributeList);
+
+    if (ImageNameIndex != -1) {
+        AttributeList->Attributes[ImageNameIndex].Value = (ULONG_PTR)objname.Buffer;
+        AttributeList->Attributes[ImageNameIndex].Size = objname.Length;
+    }
+
+    return status;
+}
+
+//---------------------------------------------------------------------------
 // Proc_CreateProcessWithTokenW
 //---------------------------------------------------------------------------
 
@@ -1775,7 +1906,7 @@ _FX UINT Proc_WinExec(LPCSTR lpCmdLine, UINT uCmdShow)
 
     memzero(&pi, sizeof(PROCESS_INFORMATION));
 
-    ok = CreateProcessA(
+   ok = CreateProcessA(
         NULL, (char *)lpCmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi);
 
     if (ok) {
@@ -1831,8 +1962,8 @@ _FX BOOLEAN SbieDll_RunFromHome(
     } else
         i = 0;
 
-    if (Dll_BoxName) {
-        SbieApi_GetHomePath(NULL, 0, &path[i], MAX_PATH);
+    if (Dll_HomeDosPath) {
+        wcscpy(&path[i], Dll_HomeDosPath);
         wcscat(path, L"\\");
     } else {
         GetModuleFileName(NULL, &path[i], MAX_PATH);

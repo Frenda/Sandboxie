@@ -163,6 +163,9 @@ static void Com_Monitor(REFCLSID rclsid, ULONG monflag);
 #define HSTRING void*
 static HRESULT Com_RoGetActivationFactory(HSTRING activatableClassId, REFIID  iid, void** factory);
 
+//static HRESULT Com_IClassFactoryEx_New(
+//    REFCLSID rclsid, const WCHAR* StringGUID, void** ppv);
+
 //---------------------------------------------------------------------------
 
 
@@ -289,6 +292,10 @@ static const GUID IID_INetFwRule = {
     0xAF230D27, 0xBABA, 0x4E42,
         { 0xAC, 0xED, 0xF5, 0x24, 0xF2, 0x2C, 0xFC, 0xE2 } };
 
+//static const GUID IID_VirtualDesktopManager = {
+//    0xAA509086, 0x5CA9, 0x4C25,
+//        { 0x8F, 0x95, 0x58, 0x9D, 0x3C, 0x07, 0xB4, 0x8A } };
+
 
 //---------------------------------------------------------------------------
 // Com_LoadClsidList
@@ -407,9 +414,6 @@ _FX void Com_LoadClsidList(const WCHAR* setting, GUID** pClsids, ULONG* pNumClsi
 _FX BOOLEAN SbieDll_IsOpenClsid(
     REFCLSID rclsid, ULONG clsctx, const WCHAR *BoxName)
 {
-    ULONG index;
-    GUID *guid;
-
     static const GUID CLSID_WinMgmt = {
         0x8BC3F05E, 0xD86B, 0x11D0,
                         { 0xA0, 0x75, 0x00, 0xC0, 0x4F, 0xB6, 0x88, 0x20 } };
@@ -436,6 +440,9 @@ _FX BOOLEAN SbieDll_IsOpenClsid(
 
     if (clsctx & CLSCTX_LOCAL_SERVER) {
 
+        ULONG index;
+        GUID *guid;
+
         //
         // check against list of built-in CLSID exclusions
         //
@@ -448,25 +455,24 @@ _FX BOOLEAN SbieDll_IsOpenClsid(
 
             return TRUE;
         }
+
+        //
+        // initialize list of user-configured CLSID exclusions
+        //
+
+        static const WCHAR* setting = L"OpenClsid";
+        Com_LoadClsidList(setting , &Com_OpenClsids, &Com_NumOpenClsids, BoxName);
+
+        //
+        // check against list of user-configured CLSID exclusions
+        //
+
+        for (index = 0; index < Com_NumOpenClsids; ++index) {
+            guid = &Com_OpenClsids[index];
+            if (memcmp(guid, rclsid, sizeof(GUID)) == 0 /*|| memcmp(guid, &CLSID_Null, sizeof(GUID)) == 0*/)
+                return TRUE;
+        }
     }
-
-    //
-    // initialize list of user-configured CLSID exclusions
-    //
-
-    static const WCHAR* setting = L"OpenClsid";
-    Com_LoadClsidList(setting , &Com_OpenClsids, &Com_NumOpenClsids, BoxName);
-
-    //
-    // check against list of user-configured CLSID exclusions
-    //
-
-    for (index = 0; index < Com_NumOpenClsids; ++index) {
-        guid = &Com_OpenClsids[index];
-        if (memcmp(guid, rclsid, sizeof(GUID)) == 0 /*|| memcmp(guid, &CLSID_Null, sizeof(GUID)) == 0*/)
-            return TRUE;
-    }
-    
 
     if (Com_IsFirewallClsid(rclsid, BoxName))
         return TRUE;
@@ -537,14 +543,21 @@ _FX BOOLEAN Com_IsClosedClsid(REFCLSID rclsid)
         0x66, 0xf7, 0xe1, 0x1b, 0x36, 0x55, 0xd1, 0x11,
         0xb7, 0x26, 0x00, 0xc0, 0x4f, 0xb9, 0x26, 0xaf };
 
-    if (memcmp(rclsid, EventSystem, 16)      == 0)
-        return TRUE;
+    // moved to templates.ini
+    //static const UCHAR PinToStartScreen[16] = { // {470C0EBD-5D73-4D58-9CED-E91E22E23282} 
+    //    0xbd, 0x0e, 0x0c, 0x47, 0x73, 0x5d, 0x58, 0x4d, 
+    //    0x9c, 0xed, 0xe9, 0x1e, 0x22, 0xe2, 0x32, 0x82
+    //};
 
-    if (memcmp(rclsid, EventSystemTier2, 16) == 0)
-        return TRUE;
+    static const UCHAR* ClosedIDs[] = { EventSystem, EventSystemTier2/*, PinToStartScreen*/ };
 
     ULONG index;
     GUID* guid;
+
+    for (index = 0; index < ARRAYSIZE(ClosedIDs); ++index) {
+        if (memcmp(rclsid, ClosedIDs[index], 16) == 0)
+            return TRUE;
+    }
 
     //
     // initialize list of user-configured CLSID blocks
@@ -691,7 +704,19 @@ _FX HRESULT Com_CoCreateInstance(
         return E_ACCESSDENIED;
     }
 
-    if (!Ipc_OpenCOM && SbieDll_IsOpenClsid(rclsid, clsctx, NULL)) {
+    /*if (memcmp(rclsid, &IID_VirtualDesktopManager, 16) == 0) {
+
+        hr = Com_IClassFactoryEx_New(rclsid, NULL, (void **)&pFactory);
+
+        if (SUCCEEDED(hr)) {
+
+            hr = IClassFactory_CreateInstance(
+                                        pFactory, pUnkOuter, riid, ppv);
+
+            IClassFactory_Release(pFactory);
+        }
+
+    } else*/ if (!Ipc_OpenCOM && SbieDll_IsOpenClsid(rclsid, clsctx, NULL)) {
 
         hr = Com_IClassFactory_New(rclsid, NULL, (void **)&pFactory);
 
@@ -3480,21 +3505,24 @@ _FX void Com_LoadRTList(const WCHAR* setting, WCHAR** pNames)
 
 _FX BOOLEAN Com_IsClosedRT(const wchar_t* strClassId)
 {
-    //
-    // Chrome uses the FindAppUriHandlersAsync, which fails returning a NULL value when we don't have com open and more rights
-    // than we should have. Chrome does not check for this failure mode and dereferences it, resulting in a fatal crash.
-    // Since we don't support modern app features anyways, the simplest workaround is to block this interface.
-    //
-    if (Dll_ImageType == DLL_IMAGE_GOOGLE_CHROME) {
+    if ((Dll_ProcessFlags & SBIE_FLAG_APP_COMPARTMENT) == 0) { // in complartment mode those should work fine as we have a normal token
 
-        if (wcscmp(strClassId, L"Windows.System.Launcher") == 0)
-            return TRUE;
+        //
+        // Chrome uses the FindAppUriHandlersAsync, which fails returning a NULL value when we don't have com open and more rights
+        // than we should have. Chrome does not check for this failure mode and dereferences it, resulting in a fatal crash.
+        // Since we don't support modern app features anyways, the simplest workaround is to block this interface.
+        //
+        if (Dll_ImageType == DLL_IMAGE_GOOGLE_CHROME) {
+
+            if (wcscmp(strClassId, L"Windows.System.Launcher") == 0)
+                return TRUE;
+        }
+
+        //
+        // this seems to be broken as well
+        //if (wcscmp(strClassId, L"Windows.UI.Notifications.ToastNotificationManager") == 0)
+        //    return TRUE;
     }
-
-    //
-    // this seems to be broken as well
-    //if (wcscmp(strClassId, L"Windows.UI.Notifications.ToastNotificationManager") == 0)
-    //    return TRUE;
 
     static const WCHAR* setting = L"ClosedRT";
     Com_LoadRTList(setting, &Com_ClosedRT);
@@ -3529,3 +3557,91 @@ _FX HRESULT Com_RoGetActivationFactory(HSTRING activatableClassId, REFIID  iid, 
     SbieApi_MonitorPut(MONITOR_RTCLASS, strClassId);
     return __sys_RoGetActivationFactory(activatableClassId, iid, factory);
 }
+
+
+/*
+//---------------------------------------------------------------------------
+// Com_IClassFactoryEx_CreateInstance
+//---------------------------------------------------------------------------
+
+_FX HRESULT Com_OuterIUnknown_QueryInterface_NotImpl(
+    COM_IUNKNOWN* This, REFIID riid, void** ppv)
+{
+    SbieApi_Log(2205, L"IUnknown::QueryInterface");
+    return E_NOTIMPL;
+}
+
+_FX HRESULT Com_IsWindowOnCurrentVirtualDesktop(COM_IUNKNOWN* This, __RPC__in HWND topLevelWindow, __RPC__out BOOL* onCurrentDesktop) {
+    return E_NOTIMPL;
+}
+_FX HRESULT Com_GetWindowDesktopId(COM_IUNKNOWN* This, __RPC__in HWND topLevelWindow, __RPC__out GUID *desktopId) {
+    return E_NOTIMPL;
+}
+_FX HRESULT Com_MoveWindowToDesktop(COM_IUNKNOWN* This, __RPC__in HWND topLevelWindow, __RPC__in REFGUID desktopId) {
+    return E_NOTIMPL;
+}
+
+void* Com_VirtualDesktopManager_vtbl[] = { Com_IsWindowOnCurrentVirtualDesktop,Com_GetWindowDesktopId,Com_MoveWindowToDesktop };
+
+typedef struct _COM_ITF {
+    const GUID* Guid;
+    void** vtbl;
+    int vtblCnt;
+} COM_ITF;
+
+COM_ITF Com_Interfaces[] = { {&IID_VirtualDesktopManager, Com_VirtualDesktopManager_vtbl, ARRAYSIZE(Com_VirtualDesktopManager_vtbl)} };
+
+
+_FX HRESULT Com_IClassFactoryEx_CreateInstance(
+    COM_IUNKNOWN *This, IUnknown *pUnkOuter, REFIID riid, void **ppv)
+{
+    ULONG hr;
+    COM_IUNKNOWN *pUnknown;
+
+    if (pUnkOuter)
+        SbieApi_Log(2205, L"IClassFactory::CreateInstance");
+
+    for (ULONG i = 0; i < ARRAYSIZE(Com_Interfaces); i++) {
+
+        if (memcmp(&This->Guid, Com_Interfaces[i].Guid, 16) == 0) {
+
+            hr = Com_IUnknown_New(-1, 3, FLAG_REMOTE_REF | FLAG_PPROXY_AT_VTBL3, &pUnknown);
+            if (SUCCEEDED(hr)) {
+
+                pUnknown->Vtbl[0] = Com_OuterIUnknown_QueryInterface_NotImpl;
+                memcpy(&pUnknown->Vtbl[3], Com_Interfaces[i].vtbl, sizeof(void*) * Com_Interfaces[i].vtblCnt);
+                memcpy(&pUnknown->Guid, riid, sizeof(GUID));
+
+                *ppv = pUnknown;
+            }
+            return hr;
+        }
+    }
+
+    return E_NOTIMPL;
+}
+
+
+//---------------------------------------------------------------------------
+// Com_IClassFactoryEx_New
+//---------------------------------------------------------------------------
+
+
+_FX HRESULT Com_IClassFactoryEx_New(
+    REFCLSID rclsid, const WCHAR* StringGUID, void** ppv)
+{
+    HRESULT hr;
+    COM_IUNKNOWN *This;
+    hr = Com_IUnknown_New(-1, 2, FLAG_REMOTE_REF, &This);
+    if (SUCCEEDED(hr)) {
+
+        This->Vtbl[0] = Com_IClassFactory_QueryInterface;
+        This->Vtbl[3] = Com_IClassFactoryEx_CreateInstance;
+        This->Vtbl[4] = Com_IClassFactory_LockServer;
+        memcpy(&This->Guid, rclsid, sizeof(GUID));
+
+        *ppv = This;
+    }
+    return hr;
+}
+*/

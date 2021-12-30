@@ -50,9 +50,9 @@ public:
 
 	CSbieView*			GetBoxView() { return m_pBoxView; }
 
-	void				RunSandboxed(const QStringList& Commands, const QString& BoxName);
+	void				RunSandboxed(const QStringList& Commands, const QString& BoxName, const QString& WrkDir = QString());
 
-	QIcon				GetBoxIcon(bool inUse, int boxType = 0);
+	QIcon				GetBoxIcon(int boxType, bool inUse = false);
 	QString				GetBoxDescription(int boxType);
 
 	bool				CheckCertificate();

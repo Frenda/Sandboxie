@@ -103,6 +103,16 @@ public:
 	virtual SB_STATUS		LockConfig(const QString& NewPassword);
 	virtual void			ClearPassword();
 
+	enum EFeatureFlags
+	{
+		eSbieFeatureWFP			= 0x00000001,
+		eSbieFeatureObCB		= 0x00000002,
+		eSbieFeaturePMod		= 0x00000004,
+		eSbieFeatureAppC		= 0x00000008,
+		eSbieFeatureSbiL		= 0x00000010,
+		eSbieFeatureCert		= 0x80000000
+	};
+
 	virtual quint32			GetFeatureFlags();
 	virtual QString			GetFeatureStr();
 
@@ -121,7 +131,7 @@ public:
 	// Other
 	virtual QString			GetSbieMsgStr(quint32 code, quint32 Lang = 1033);
 
-	virtual SB_STATUS		RunStart(const QString& BoxName, const QString& Command, QProcess* pProcess = NULL, bool Elevated = false);
+	virtual SB_STATUS		RunStart(const QString& BoxName, const QString& Command, bool Elevated = false, const QString& WorkingDir = QString(), QProcess* pProcess = NULL);
 	virtual QString			GetStartPath() const;
 
 	virtual quint32			GetSessionID() const;

@@ -85,6 +85,14 @@ typedef struct _WND_HOOK {
 
 static HWND DDE_Request_ProxyWnd = NULL;
 
+#ifndef _DPI_AWARENESS_CONTEXTS_
+struct DPI_AWARENESS_CONTEXT__ { int unused; };
+typedef DPI_AWARENESS_CONTEXT__ *DPI_AWARENESS_CONTEXT;
+#endif
+typedef DPI_AWARENESS_CONTEXT (WINAPI *P_SetThreadDpiAwarenessContext)(
+    DPI_AWARENESS_CONTEXT dpiContext);
+
+static P_SetThreadDpiAwarenessContext __sys_SetThreadDpiAwarenessContext = NULL;
 
 //---------------------------------------------------------------------------
 // Constructor
@@ -113,6 +121,9 @@ GuiServer::GuiServer()
 	else*/
 	GetVersionExW(&osvi); // since windows 10 this one is lying
     m_nOSVersion = osvi.dwMajorVersion * 10 + osvi.dwMinorVersion;
+
+    __sys_SetThreadDpiAwarenessContext = (P_SetThreadDpiAwarenessContext)GetProcAddress(
+        GetModuleHandle(L"user32.dll"), "SetThreadDpiAwarenessContext");
 }
 
 
@@ -3043,8 +3054,16 @@ ULONG GuiServer::ClipCursorSlave(SlaveArgs *args)
     if (req->have_rect)
         rect = &req->rect;
 
+    DPI_AWARENESS_CONTEXT old_trd_dpi_ctx = __sys_SetThreadDpiAwarenessContext
+        ? __sys_SetThreadDpiAwarenessContext((DPI_AWARENESS_CONTEXT)(LONG_PTR)req->dpi_awareness_ctx)
+        : NULL;
+
     ClipCursor(rect); //if (! ) // as this seems to randomly fail, don't issue errors
     //    return STATUS_ACCESS_DENIED; // todo: add reply and return ret value
+
+    if (__sys_SetThreadDpiAwarenessContext) {
+        __sys_SetThreadDpiAwarenessContext(old_trd_dpi_ctx);
+    }
 
     return STATUS_SUCCESS;
 }
@@ -3339,10 +3358,18 @@ ULONG GuiServer::SetCursorPosSlave(SlaveArgs *args)
     if (args->req_len != sizeof(GUI_SET_CURSOR_POS_REQ))
         return STATUS_INFO_LENGTH_MISMATCH;
 
+    DPI_AWARENESS_CONTEXT old_trd_dpi_ctx = __sys_SetThreadDpiAwarenessContext
+        ? __sys_SetThreadDpiAwarenessContext((DPI_AWARENESS_CONTEXT)(LONG_PTR)req->dpi_awareness_ctx)
+        : NULL;
+
     SetLastError(req->error);
 
     rpl->retval = (ULONG)SetCursorPos(req->x, req->y);
     rpl->error = GetLastError();
+
+    if (__sys_SetThreadDpiAwarenessContext) {
+        __sys_SetThreadDpiAwarenessContext(old_trd_dpi_ctx);
+    }
 
     args->rpl_len = sizeof(GUI_SET_CURSOR_POS_RPL);
     return STATUS_SUCCESS;
@@ -3632,7 +3659,8 @@ ULONG GuiServer::GetProcessPathList(
     const HANDLE xpid = (HANDLE)(ULONG_PTR)pid;
 
     ULONG len;
-    LONG status = SbieApi_QueryPathList(path_code, &len, NULL, xpid);
+    LONG status = SbieApi_QueryPathList(path_code, &len, NULL, xpid, FALSE);
+    //LONG status = SbieApi_QueryPathList(path_code, &len, NULL, xpid, TRUE);
     if (status != 0)
         return status;
 
@@ -3646,7 +3674,8 @@ ULONG GuiServer::GetProcessPathList(
     LIST *list = (LIST *)Pool_Alloc(pool, sizeof(LIST));
 
     if (path && list)
-        status = SbieApi_QueryPathList(path_code, NULL, path, xpid);
+        status = SbieApi_QueryPathList(path_code, NULL, path, xpid, FALSE);
+        //status = SbieApi_QueryPathList(path_code, NULL, path, xpid, TRUE);
 
     if (status != STATUS_SUCCESS) {
         Pool_Delete(pool);
@@ -3655,7 +3684,11 @@ ULONG GuiServer::GetProcessPathList(
 
     List_Init(list);
     while (*path) {
-        PATTERN *pattern = Pattern_Create(pool, path, TRUE);
+        PATTERN *pattern = Pattern_Create(pool, path, TRUE, 0);
+    //while (*((ULONG*)path) != -1) {
+    //    ULONG level = *((ULONG*)path);
+    //    path += sizeof(ULONG)/sizeof(WCHAR);
+    //    PATTERN *pattern = Pattern_Create(pool, path, TRUE, level);
         if (! pattern) {
             Pool_Delete(pool);
             return status;

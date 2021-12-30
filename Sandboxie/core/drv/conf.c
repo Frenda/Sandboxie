@@ -134,20 +134,6 @@ static const WCHAR *Conf_Get_Setting_Name(
 //---------------------------------------------------------------------------
 
 
-static BOOLEAN str_map_match(const void* key1, const void* key2) {
-	const wchar_t** str1 = (const wchar_t**)key1;
-	const wchar_t** str2 = (const wchar_t**)key2;
-	return _wcsicmp(*str1, *str2) == 0;
-}
-
-static unsigned int str_map_hash(const void* key, size_t size) {
-	const wchar_t** str = (const wchar_t**)key;
-	unsigned int hash = 5381;
-	for (unsigned short* ptr = (unsigned short*)*str; *ptr != 0; ptr++)
-		hash = ((hash << 5) + hash) ^ *ptr;
-	return hash;
-}
-
 
 //---------------------------------------------------------------------------
 
@@ -1472,11 +1458,36 @@ _FX NTSTATUS Conf_Api_Reload(PROCESS *proc, ULONG64 *parms)
             }
         }
 
+        BOOLEAN obj_filter_enabled = Conf_Get_Boolean(NULL, L"EnableObjectFiltering", 0, FALSE);
+        extern BOOLEAN Obj_CallbackInstalled;
+        if (Obj_CallbackInstalled != obj_filter_enabled && Driver_OsVersion > DRIVER_WINDOWS_VISTA) {
+            if (obj_filter_enabled) {
+                Obj_Load_Filter();
+            }
+            else {
+                Obj_Unload_Filter();
+            }
+        }
+
         extern UCHAR SandboxieLogonSid[SECURITY_MAX_SID_SIZE];
         if (Conf_Get_Boolean(NULL, L"AllowSandboxieLogon", 0, FALSE) && SandboxieLogonSid[0] == 0) {
             extern BOOLEAN Token_Init_SbieLogin(void);
             Token_Init_SbieLogin();
         }
+
+        /*
+#ifdef HOOK_WIN32K
+        // must be windows 10 or later
+        if (Driver_OsBuild >= 10041) {
+            extern ULONG Syscall_MaxIndex32;
+            if (Conf_Get_Boolean(NULL, L"EnableWin32kHooks", 0, FALSE) && Syscall_MaxIndex32 == 0) {
+                if(Syscall_Init_List32()){
+                    Syscall_Init_Table32();
+                }
+            }
+        }
+#endif
+        */
 
         InterlockedExchange(&reconf_lock, 0);
     }

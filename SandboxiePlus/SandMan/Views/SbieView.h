@@ -59,7 +59,7 @@ protected:
 
 	QMap<QString, QStringList>	m_Groups;
 	QSet<QString>				m_Collapsed;
-	bool						m_UserConfigChanged;
+	//bool						m_UserConfigChanged;
 
 private:
 
@@ -116,6 +116,7 @@ private:
 	QAction*				m_pMenuRecover;
 	QAction*				m_pMenuCleanUp;
 	QAction*				m_pMenuRemove;
+	QAction*				m_pMenuDuplicate;
 	QAction*				m_pMenuMoveUp;
 	//QAction*				m_pMenuMoveBy;
 	QAction*				m_pMenuMoveDown;

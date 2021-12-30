@@ -78,13 +78,19 @@ void COptionsWindow::LoadTemplates()
 	m_TemplatesChanged = false;
 }
 
+void COptionsWindow::SetTemplate(const QString& Template, bool bEnabled)
+{
+	if(bEnabled)
+		m_BoxTemplates.append(Template);
+	else
+		m_BoxTemplates.removeAll(Template);
+	m_TemplatesChanged = true; 
+	OnOptChanged();
+}
+
 void COptionsWindow::OnScreenReaders()
 { 
-	if (ui.chkScreenReaders->isChecked())
-		m_BoxTemplates.append("ScreenReader");
-	else
-		m_BoxTemplates.removeAll("ScreenReader");
-	m_TemplatesChanged = true; 
+	SetTemplate("ScreenReader", ui.chkScreenReaders->isChecked());
 }
 
 QString COptionsWindow::GetCategoryName(const QString& Category)
@@ -114,13 +120,13 @@ void COptionsWindow::ShowTemplates()
 		if (!CategoryFilter.isEmpty() && I.key().compare(CategoryFilter, Qt::CaseInsensitive) != 0)
 			continue;
 
-		QString Name = I.value().first.mid(9);
-
-		if (!Name.isEmpty() && Name.indexOf(TextFilter, 0, Qt::CaseInsensitive) == -1)
+		if (I.value().second.indexOf(TextFilter, 0, Qt::CaseInsensitive) == -1)
 			continue;
 
 		if (I.key().isEmpty())
 			continue; // dont show templates without a category (these are usually deprecated templates)
+
+		QString Name = I.value().first.mid(9);
 
 		QTreeWidgetItem* pItem = new QTreeWidgetItem();
 		pItem->setText(0, GetCategoryName(I.key()));
@@ -154,12 +160,14 @@ void COptionsWindow::OnTemplateClicked(QTreeWidgetItem* pItem, int Column)
 		if (!m_BoxTemplates.contains(Name)) {
 			m_BoxTemplates.append(Name);
 			m_TemplatesChanged = true;
+			OnOptChanged();
 		}
 	}
 	else if (pItem->checkState(1) == Qt::Unchecked) {
 		if (m_BoxTemplates.contains(Name)) {
 			m_BoxTemplates.removeAll(Name);
 			m_TemplatesChanged = true;
+			OnOptChanged();
 		}
 	}
 }
@@ -254,6 +262,7 @@ void COptionsWindow::OnFolderChanged()
 {
 	//CPathEdit* pEdit = (CPathEdit*)sender();
 	m_FoldersChanged = true;
+	OnOptChanged();
 }
 
 void COptionsWindow::ShowFolders()

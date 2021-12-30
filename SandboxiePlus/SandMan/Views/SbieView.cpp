@@ -24,7 +24,7 @@ CSbieView::CSbieView(QWidget* parent) : CPanelView(parent)
 	m_pMainLayout->setMargin(0);
 	this->setLayout(m_pMainLayout);
 
-	m_UserConfigChanged = false;
+	//m_UserConfigChanged = false;
 
 	m_pSbieModel = new CSbieModel();
 	m_pSbieModel->SetTree(true);
@@ -62,6 +62,9 @@ CSbieView::CSbieView(QWidget* parent) : CPanelView(parent)
 	connect(m_pSbieTree, SIGNAL(collapsed(const QModelIndex &)), this, SLOT(OnCollapsed(const QModelIndex &)));
 
 	//connect(theGUI, SIGNAL(ReloadPanels()), m_pSbieModel, SLOT(Clear()));
+
+	//m_pSbieTree->setStyleSheet("QTreeView::item:focus {selection-background-color: yellow;}");
+	//m_pSbieTree->setFocusPolicy(Qt::NoFocus);
 
 	m_pMainLayout->addWidget(m_pSbieTree);
 	// 
@@ -126,6 +129,7 @@ CSbieView::CSbieView(QWidget* parent) : CPanelView(parent)
 		m_pMenuPresetsShares = m_pMenuPresets->addAction(tr("Allow Network Shares"), this, SLOT(OnSandBoxAction()));
 		m_pMenuPresetsShares->setCheckable(true);
 	
+	m_pMenuDuplicate = m_pMenu->addAction(CSandMan::GetIcon("Duplicate"), tr("Duplicate Sandbox"), this, SLOT(OnSandBoxAction()));
 	m_pMenuRename = m_pMenu->addAction(CSandMan::GetIcon("Rename"), tr("Rename Sandbox"), this, SLOT(OnSandBoxAction()));
 	m_iMoveTo = m_pMenu->actions().count();
 	m_pMenuMoveTo = m_pMenu->addMenu(CSandMan::GetIcon("Group"), tr("Move Box/Group"));
@@ -301,11 +305,11 @@ void CSbieView::UpdateMenu()
 {
 	QList<QAction*> MenuActions = m_pMenu->actions();
 
-	bool isConnected = theAPI->IsConnected();
-	if (isConnected) {
-		foreach(QAction * pAction, MenuActions) 
-			pAction->setEnabled(true);
-	}
+	//bool isConnected = theAPI->IsConnected();
+	//if (isConnected) {
+	//	foreach(QAction * pAction, MenuActions) 
+	//		pAction->setEnabled(true);
+	//}
 
 	CSandBoxPtr pBox;
 	CBoxedProcessPtr pProcess;
@@ -356,6 +360,7 @@ void CSbieView::UpdateMenu()
 		UpdateRunMenu(pBox);
 
 	m_pMenuMkLink->setEnabled(iSandBoxeCount == 1);
+	m_pMenuDuplicate->setEnabled(iSandBoxeCount == 1);
 	m_pMenuRename->setEnabled(iSandBoxeCount == 1);
 	m_pMenuRecover->setEnabled(iSandBoxeCount == 1);
 
@@ -419,14 +424,17 @@ void CSbieView::UpdateMenu()
 	//m_pMenuSuspend->setEnabled(iProcessCount > iSuspendedCount);
 	//m_pMenuResume->setEnabled(iSuspendedCount > 0);
 
-	if (!isConnected) {
-		foreach(QAction * pAction, MenuActions)
-			pAction->setEnabled(false);
-	}
+	//if (!isConnected) {
+	//	foreach(QAction * pAction, MenuActions)
+	//		pAction->setEnabled(false);
+	//}
 }
 
 void CSbieView::OnMenu(const QPoint& Point)
 {
+	if (!theAPI->IsConnected())
+		return;
+
 	CPanelView::OnMenu(Point);
 }
 
@@ -669,8 +677,10 @@ void CSbieView::OnGroupAction()
 		m_pSbieModel->Clear(); //todo improve that
 	}
 
-	m_UserConfigChanged = true;
+	//m_UserConfigChanged = true;
 	UpdateGroupMenu();
+
+	SaveUserConfig();
 }
 
 QString CSbieView::AddNewBox()
@@ -703,8 +713,10 @@ QString CSbieView::AddNewGroup()
 	m_Groups[Parent].append(Name);
 
 	
-	m_UserConfigChanged = true;
+	//m_UserConfigChanged = true;
 	UpdateGroupMenu();
+
+	SaveUserConfig();
 
 	return Name;
 }
@@ -874,6 +886,43 @@ void CSbieView::OnSandBoxAction(QAction* Action)
 			});
 			pSnapshotsWindow->show();
 		}
+	}
+	else if (Action == m_pMenuDuplicate)
+	{
+		QString OldValue = SandBoxes.first()->GetName().replace("_", " ");
+		QString Value = QInputDialog::getText(this, "Sandboxie-Plus", tr("Please enter a new name for the duplicated Sandbox."), QLineEdit::Normal, tr("%1 Copy").arg(OldValue));
+		if (Value.isEmpty() || Value == OldValue)
+			return;
+		
+		QString Name = Value.replace(" ", "_");
+		SB_STATUS Status = theAPI->CreateBox(Name, false);
+
+		if (!Status.IsError())
+		{
+			CSandBoxPtr pBox = theAPI->GetBoxByName(Value);
+
+			QList<QPair<QString, QString>> Settings;
+			CSandBoxPtr pSrcBox = theAPI->GetBoxByName(SandBoxes.first()->GetName());
+			qint32 status = 0;
+			if (!pSrcBox.isNull()) Settings = pSrcBox->GetIniSection(&status);
+			if (Settings.isEmpty())
+				Status = SB_ERR(SB_FailedCopyConf, QVariantList() << SandBoxes.first()->GetName() << (quint32)status);
+			else
+			{
+				for (QList<QPair<QString, QString>>::iterator I = Settings.begin(); I != Settings.end(); ++I)
+				{
+					Status = theAPI->SbieIniSet(Name, I->first, I->second, CSbieAPI::eIniInsert, false);
+					if (Status.IsError())
+						break;
+				}
+			}
+
+			theAPI->CommitIniChanges();
+			theAPI->ReloadConfig();
+			theAPI->ReloadBoxes();
+		}
+
+		Results.append(Status);
 	}
 	else if (Action == m_pMenuRename)
 	{
@@ -1288,11 +1337,14 @@ void CSbieView::ChangeExpand(const QModelIndex& index, bool bExpand)
 	else if (m_pSbieModel->GetType(ModelIndex) == CSbieModel::eBox)
 		Name = m_pSbieModel->GetSandBox(ModelIndex)->GetName();
 
-	m_UserConfigChanged = true;
 	if(bExpand)
 		m_Collapsed.remove(Name);
 	else
 		m_Collapsed.insert(Name);
+
+	//m_UserConfigChanged = true;
+
+	SaveUserConfig();
 }
 
 void CSbieView::ReloadUserConfig()
@@ -1310,9 +1362,9 @@ void CSbieView::ReloadUserConfig()
 
 void CSbieView::SaveUserConfig()
 {
-	if (!m_UserConfigChanged)
-		return;
-	m_UserConfigChanged = false;
+	//if (!m_UserConfigChanged)
+	//	return;
+	//m_UserConfigChanged = false;
 
 	QString Grouping = CSbieView__SerializeGroup(m_Groups);
 	theAPI->GetUserSettings()->SetText("BoxDisplayOrder", Grouping);

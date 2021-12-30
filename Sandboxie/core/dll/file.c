@@ -278,6 +278,8 @@ static void File_ScrambleShortName(WCHAR* ShortName, CCHAR* ShortNameLength, ULO
 
 static void File_UnScrambleShortName(WCHAR* ShortName, ULONG ScramKey);
 
+static NTSTATUS File_GetFileName(HANDLE FileHandle, ULONG NameLen, WCHAR *NameBuf);
+
 //---------------------------------------------------------------------------
 
 
@@ -286,18 +288,18 @@ static P_NtOpenFile                 __sys_NtOpenFile                = NULL;
 static P_NtQueryAttributesFile      __sys_NtQueryAttributesFile     = NULL;
 static P_NtQueryFullAttributesFile  __sys_NtQueryFullAttributesFile = NULL;
 static P_NtQueryInformationFile     __sys_NtQueryInformationFile    = NULL;
-static P_GetFinalPathNameByHandle   __sys_GetFinalPathNameByHandleW = NULL;
+       P_GetFinalPathNameByHandle   __sys_GetFinalPathNameByHandleW = NULL;
        P_NtQueryDirectoryFile       __sys_NtQueryDirectoryFile      = NULL;
 static P_NtQueryDirectoryFileEx     __sys_NtQueryDirectoryFileEx    = NULL;
 static P_NtSetInformationFile       __sys_NtSetInformationFile      = NULL;
 static P_NtDeleteFile               __sys_NtDeleteFile              = NULL;
-static P_NtClose                    __sys_NtClose                   = NULL;
+       P_NtClose                    __sys_NtClose                   = NULL;
 static P_NtCreateNamedPipeFile      __sys_NtCreateNamedPipeFile     = NULL;
 static P_NtCreateMailslotFile       __sys_NtCreateMailslotFile      = NULL;
 static P_NtReadFile                 __sys_NtReadFile                = NULL;
 static P_NtWriteFile                __sys_NtWriteFile               = NULL;
 static P_NtFsControlFile            __sys_NtFsControlFile           = NULL;
-static P_NtDeviceIoControlFile      __sys_NtDeviceIoControlFile     = NULL;
+       P_NtDeviceIoControlFile      __sys_NtDeviceIoControlFile     = NULL;
 static P_RtlGetCurrentDirectory_U   __sys_RtlGetCurrentDirectory_U  = NULL;
 static P_RtlSetCurrentDirectory_U   __sys_RtlSetCurrentDirectory_U  = NULL;
 static P_RtlGetFullPathName_U       __sys_RtlGetFullPathName_U      = NULL;
@@ -339,6 +341,9 @@ static void *File_Wow64DisableWow64FsRedirection = NULL;
 static void *File_Wow64RevertWow64FsRedirection = NULL;
 #endif WOW64_FS_REDIR
 
+static WCHAR *File_SysVolume = NULL;
+static ULONG File_SysVolumeLen = 0;
+
 static WCHAR *File_AllUsers = NULL;
 static ULONG File_AllUsersLen = 0;
 
@@ -347,9 +352,6 @@ static ULONG File_CurrentUserLen = 0;
 
 static WCHAR *File_PublicUser = NULL;
 static ULONG File_PublicUserLen = 0;
-
-static WCHAR *File_HomeNtPath = NULL;
-static ULONG File_HomeNtPathLen = 0;
 
 static BOOLEAN File_DriveAddSN = FALSE;
 
@@ -2099,13 +2101,13 @@ _FX ULONG File_MatchPath2(const WCHAR *path, ULONG *FileFlags, BOOLEAN bCheckObj
     // disregarding any settings that might affect it
     //
 
-    if (File_HomeNtPathLen) {
+    if (Dll_HomeNtPathLen) {
         ULONG path_len = wcslen(path);
-        if (path_len >= File_HomeNtPathLen
-                && (path[File_HomeNtPathLen] == L'\\' ||
-                    path[File_HomeNtPathLen] == L'\0')
+        if (path_len >= Dll_HomeNtPathLen
+                && (path[Dll_HomeNtPathLen] == L'\\' ||
+                    path[Dll_HomeNtPathLen] == L'\0')
                 && 0 == Dll_NlsStrCmp(
-                            path, File_HomeNtPath, File_HomeNtPathLen)) {
+                            path, Dll_HomeNtPath, Dll_HomeNtPathLen)) {
 
             mp_flags = PATH_OPEN_FLAG;
             goto finish;
@@ -2498,7 +2500,22 @@ _FX NTSTATUS File_NtCreateFileImpl(
 
         if (status == STATUS_OBJECT_PATH_SYNTAX_BAD) {
 
-        	SbieApi_MonitorPut2(MONITOR_PIPE | MONITOR_DENY, TruePath, FALSE);
+            //
+            // teh driver usually blocks this anyways so try only in app mode
+            //
+
+            if ((Dll_ProcessFlags & SBIE_FLAG_APP_COMPARTMENT) != 0){
+
+                SbieApi_MonitorPut2(MONITOR_PIPE, TruePath, FALSE);
+
+                return __sys_NtCreateFile(
+                    FileHandle, DesiredAccess, ObjectAttributes, IoStatusBlock,
+                    AllocationSize, FileAttributes, ShareAccess, CreateDisposition,
+                    CreateOptions, EaBuffer, EaLength);
+
+            } else {
+                SbieApi_MonitorPut2(MONITOR_PIPE | MONITOR_DENY, TruePath, FALSE);
+            }
         }
     }
 
@@ -2877,29 +2894,41 @@ ReparseLoop:
 
         if (PATH_IS_WRITE(mp_flags)) {
 
-            //
-            // for a write-only path, the directory must be the
-            // first (or: highest level) directory which matches
-            // the write-only setting.  note that File_GetFileType
-            // will need to use SbieApi_OpenFile in this case
-            //
-            // if the request is for a path below the highest level,
-            // we pretend the path does not exist
-            //
+            BOOLEAN use_rule_specificity = (Dll_ProcessFlags & SBIE_FLAG_RULE_SPECIFICITY) != 0;
 
-            int depth = File_CheckDepthForIsWritePath(TruePath);
-            if (depth == 0) {
-                status = File_GetFileType(&objattrs, TRUE, &FileType, NULL);
-                if (status == STATUS_NOT_A_DIRECTORY)
-                    status = STATUS_ACCESS_DENIED;
-            } else {
-                FileType = 0;
-                if (depth == 1 || HaveCopyParent || HaveSnapshotParent)
-                    status = STATUS_OBJECT_NAME_NOT_FOUND;
-                else
-                    status = STATUS_OBJECT_PATH_NOT_FOUND;
+            if (use_rule_specificity && SbieDll_HasReadableSubPath(L'f', TruePath)){
+
+                //
+                // When using Rule specificity we need to create some dummy directrories 
+                //
+
+                File_CreateBoxedPath(TruePath);
             }
+            else {
 
+                //
+                // for a write-only path, the directory must be the
+                // first (or: highest level) directory which matches
+                // the write-only setting.  note that File_GetFileType
+                // will need to use SbieApi_OpenFile in this case
+                //
+                // if the request is for a path below the highest level,
+                // we pretend the path does not exist
+                //
+
+                int depth = File_CheckDepthForIsWritePath(TruePath);
+                if (depth == 0) {
+                    status = File_GetFileType(&objattrs, TRUE, &FileType, NULL);
+                    if (status == STATUS_NOT_A_DIRECTORY)
+                        status = STATUS_ACCESS_DENIED;
+                } else {
+                    FileType = 0;
+                    if (depth == 1 || HaveCopyParent || HaveSnapshotParent)
+                        status = STATUS_OBJECT_NAME_NOT_FOUND;
+                    else
+                        status = STATUS_OBJECT_PATH_NOT_FOUND;
+                }
+            }
         } else {
 
             //
@@ -4644,6 +4673,7 @@ _FX NTSTATUS File_NtQueryAttributesFile(
 // File_NtQueryFullAttributesFile
 //---------------------------------------------------------------------------
 
+
 _FX NTSTATUS File_NtQueryFullAttributesFile(
     OBJECT_ATTRIBUTES *ObjectAttributes,
     FILE_NETWORK_OPEN_INFORMATION *FileInformation)
@@ -4670,6 +4700,7 @@ _FX NTSTATUS File_NtQueryFullAttributesFile(
 
     return status;
 }
+
 
 //---------------------------------------------------------------------------
 // File_NtQueryFullAttributesFileImpl
@@ -4827,26 +4858,40 @@ _FX NTSTATUS File_NtQueryFullAttributesFileImpl(
 
     if (PATH_IS_WRITE(mp_flags)) {
 
-        int depth = File_CheckDepthForIsWritePath(TruePath);
-        if (depth == 0) {
-            status = File_QueryFullAttributesDirectoryFile(
-                                                TruePath, FileInformation);
-            if (status == STATUS_NOT_A_DIRECTORY)
-                status = STATUS_OBJECT_NAME_NOT_FOUND;
-        } else if (depth == 1)
-            status = STATUS_OBJECT_NAME_NOT_FOUND;
-        else {
-            // if depth > 1 we leave the status from querying
-            // the copy path, which would be
-            // - STATUS_OBJECT_NAME_NOT_FOUND if copy parent exists
-            // - STATUS_OBJECT_PATH_NOT_FOUND if it does not exist
+        BOOLEAN use_rule_specificity = (Dll_ProcessFlags & SBIE_FLAG_RULE_SPECIFICITY) != 0;
+
+        if (use_rule_specificity && SbieDll_HasReadableSubPath(L'f', TruePath)){
+
             //
+            // When using Rule specificity we need to create some dummy directrories 
+            //
+
+            File_CreateBoxedPath(TruePath);
         }
+        else {
 
-        if (NT_SUCCESS(status))
-            FileAttrs = FileInformation->FileAttributes;
+            int depth = File_CheckDepthForIsWritePath(TruePath);
+            if (depth == 0) {
+                status = File_QueryFullAttributesDirectoryFile(
+                    TruePath, FileInformation);
+                if (status == STATUS_NOT_A_DIRECTORY)
+                    status = STATUS_OBJECT_NAME_NOT_FOUND;
+            }
+            else if (depth == 1)
+                status = STATUS_OBJECT_NAME_NOT_FOUND;
+            else {
+                // if depth > 1 we leave the status from querying
+                // the copy path, which would be
+                // - STATUS_OBJECT_NAME_NOT_FOUND if copy parent exists
+                // - STATUS_OBJECT_PATH_NOT_FOUND if it does not exist
+                //
+            }
 
-        __leave;
+            if (NT_SUCCESS(status))
+                FileAttrs = FileInformation->FileAttributes;
+
+            __leave;
+        }
     }
 
     //

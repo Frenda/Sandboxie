@@ -30,7 +30,7 @@
 #include "util.h"
 #include "session.h"
 #include "conf.h"
-
+#include "common/pattern.h"
 
 
 //---------------------------------------------------------------------------
@@ -101,6 +101,12 @@ static BOOLEAN Syscall_GetKernelAddr(
 #pragma alloc_text (INIT, Syscall_GetServiceTable)
 #endif // ALLOC_PRAGMA
 
+#include "syscall_util.c"
+
+#ifdef HOOK_WIN32K
+#include "syscall_win32.c"
+#endif
+
 
 //---------------------------------------------------------------------------
 
@@ -152,7 +158,35 @@ typedef NTSTATUS (*P_SystemService14)(
     ULONG_PTR arg05, ULONG_PTR arg06, ULONG_PTR arg07, ULONG_PTR arg08,
     ULONG_PTR arg09, ULONG_PTR arg10, ULONG_PTR arg11, ULONG_PTR arg12,
     ULONG_PTR arg13, ULONG_PTR arg14);
-
+typedef NTSTATUS (*P_SystemService15)(
+    ULONG_PTR arg01, ULONG_PTR arg02, ULONG_PTR arg03, ULONG_PTR arg04,
+    ULONG_PTR arg05, ULONG_PTR arg06, ULONG_PTR arg07, ULONG_PTR arg08,
+    ULONG_PTR arg09, ULONG_PTR arg10, ULONG_PTR arg11, ULONG_PTR arg12,
+    ULONG_PTR arg13, ULONG_PTR arg14, ULONG_PTR arg15);
+typedef NTSTATUS (*P_SystemService16)(
+    ULONG_PTR arg01, ULONG_PTR arg02, ULONG_PTR arg03, ULONG_PTR arg04,
+    ULONG_PTR arg05, ULONG_PTR arg06, ULONG_PTR arg07, ULONG_PTR arg08,
+    ULONG_PTR arg09, ULONG_PTR arg10, ULONG_PTR arg11, ULONG_PTR arg12,
+    ULONG_PTR arg13, ULONG_PTR arg14, ULONG_PTR arg15, ULONG_PTR arg16);
+typedef NTSTATUS (*P_SystemService17)(
+    ULONG_PTR arg01, ULONG_PTR arg02, ULONG_PTR arg03, ULONG_PTR arg04,
+    ULONG_PTR arg05, ULONG_PTR arg06, ULONG_PTR arg07, ULONG_PTR arg08,
+    ULONG_PTR arg09, ULONG_PTR arg10, ULONG_PTR arg11, ULONG_PTR arg12,
+    ULONG_PTR arg13, ULONG_PTR arg14, ULONG_PTR arg15, ULONG_PTR arg16, 
+    ULONG_PTR arg17);
+typedef NTSTATUS (*P_SystemService18)(
+    ULONG_PTR arg01, ULONG_PTR arg02, ULONG_PTR arg03, ULONG_PTR arg04,
+    ULONG_PTR arg05, ULONG_PTR arg06, ULONG_PTR arg07, ULONG_PTR arg08,
+    ULONG_PTR arg09, ULONG_PTR arg10, ULONG_PTR arg11, ULONG_PTR arg12,
+    ULONG_PTR arg13, ULONG_PTR arg14, ULONG_PTR arg15, ULONG_PTR arg16, 
+    ULONG_PTR arg17, ULONG_PTR arg18);
+typedef NTSTATUS (*P_SystemService19)(
+    ULONG_PTR arg01, ULONG_PTR arg02, ULONG_PTR arg03, ULONG_PTR arg04,
+    ULONG_PTR arg05, ULONG_PTR arg06, ULONG_PTR arg07, ULONG_PTR arg08,
+    ULONG_PTR arg09, ULONG_PTR arg10, ULONG_PTR arg11, ULONG_PTR arg12,
+    ULONG_PTR arg13, ULONG_PTR arg14, ULONG_PTR arg15, ULONG_PTR arg16, 
+    ULONG_PTR arg17, ULONG_PTR arg18, ULONG_PTR arg19);
+// (count & 0x0F) + 4 -> 19 is absolute maximum
 
 //---------------------------------------------------------------------------
 // Variables
@@ -185,6 +219,34 @@ _FX BOOLEAN Syscall_Init(void)
 
     if (! Syscall_Init_ServiceData())
         return FALSE;
+
+#ifdef HOOK_WIN32K
+
+    //
+    // Win32k Hooking requirers 10 or later as only thre Win32u.dll is available
+    //
+    // Note: Win32k Hooking is not compatible with HVCI causing a BSOD
+    //  KERNEL_SECURITY_CHECK_FAILURE (139)
+    //      A kernel component has corrupted a critical data structure.  
+    //      Arguments:
+    //      Arg1: 0000000000000000, A stack-based buffer has been overrun.
+    //      Arg2: 0000000000000000, Address of the trap frame for the exception that caused the bugcheck
+    //      Arg3: 0000000000000000, Address of the exception record for the exception that caused the bugcheck
+    //      Arg4: ffffxxxxxxxxxxxx, Reserved
+    // 
+    // Note: this feature applied to GdiDdDDI* solves HW Acceleration issues with chromium, hence we enable it if possible
+    // 
+
+    if (Driver_OsBuild >= 10041 && Conf_Get_Boolean(NULL, L"EnableWin32kHooks", 0, TRUE)
+        && Driver_GetRegDword(L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\DeviceGuard\\Scenarios\\HypervisorEnforcedCodeIntegrity", L"Enabled") == 0) {
+
+        if (!Syscall_Init_List32())
+            return FALSE;
+
+        if (!Syscall_Init_Table32())
+            return FALSE;
+    }
+#endif
 
     if (! Syscall_Set1("DuplicateObject", Syscall_DuplicateHandle))
         return FALSE;
@@ -276,11 +338,14 @@ _FX BOOLEAN Syscall_Init_List(void)
             ||  IS_PROC_NAME(18, "TerminateJobObject")
             ||  IS_PROC_NAME(16, "TerminateProcess")
             ||  IS_PROC_NAME(15, "TerminateThread")
-            ||  IS_PROC_NAME(14, "YieldExecution")            // ICD-10607 - McAfee uses it to pass its own data in the stack. The call is not important to us. 
 
                                                             ) {
             goto next_zwxxx;
         }
+
+        // ICD-10607 - McAfee uses it to pass its own data in the stack. The call is not important to us. 
+        if (    IS_PROC_NAME(14, "YieldExecution"))
+            goto next_zwxxx;
 
         //
         // the Google Chrome "wow_helper" process expects NtMapViewOfSection
@@ -650,6 +715,47 @@ _FX NTSTATUS Syscall_Invoke(SYSCALL_ENTRY *entry, ULONG_PTR *stack)
                         stack[5], stack[6], stack[7], stack[8], stack[9],
                         stack[10], stack[11], stack[12], stack[13]);
 
+        } else if (entry->param_count == 15) {
+
+            P_SystemService15 nt = (P_SystemService15)entry->ntos_func;
+            status = nt(stack[0], stack[1], stack[2], stack[3], stack[4],
+                        stack[5], stack[6], stack[7], stack[8], stack[9],
+                        stack[10], stack[11], stack[12], stack[13],
+                        stack[14]);
+
+        } else if (entry->param_count == 16) {
+
+            P_SystemService16 nt = (P_SystemService16)entry->ntos_func;
+            status = nt(stack[0], stack[1], stack[2], stack[3], stack[4],
+                        stack[5], stack[6], stack[7], stack[8], stack[9],
+                        stack[10], stack[11], stack[12], stack[13],
+                        stack[14], stack[15]);
+
+        } else if (entry->param_count == 17) {
+
+            P_SystemService17 nt = (P_SystemService17)entry->ntos_func;
+            status = nt(stack[0], stack[1], stack[2], stack[3], stack[4],
+                        stack[5], stack[6], stack[7], stack[8], stack[9],
+                        stack[10], stack[11], stack[12], stack[13],
+                        stack[14], stack[15], stack[16]);
+
+        } else if (entry->param_count == 18) {
+
+            P_SystemService18 nt = (P_SystemService18)entry->ntos_func;
+            status = nt(stack[0], stack[1], stack[2], stack[3], stack[4],
+                        stack[5], stack[6], stack[7], stack[8], stack[9],
+                        stack[10], stack[11], stack[12], stack[13],
+                        stack[14], stack[15], stack[16], stack[17]);
+
+        } else if (entry->param_count == 19) {
+
+            P_SystemService19 nt = (P_SystemService19)entry->ntos_func;
+            status = nt(stack[0], stack[1], stack[2], stack[3], stack[4],
+                        stack[5], stack[6], stack[7], stack[8], stack[9],
+                        stack[10], stack[11], stack[12], stack[13],
+                        stack[14], stack[15], stack[16], stack[17], 
+                        stack[18]);
+
         } else {
 
             status = STATUS_INVALID_SYSTEM_SERVICE;
@@ -691,6 +797,14 @@ _FX NTSTATUS Syscall_Api_Invoke(PROCESS *proc, ULONG64 *parms)
         return STATUS_NOT_IMPLEMENTED;
 
     syscall_index = (ULONG)parms[1];
+
+#ifdef HOOK_WIN32K
+    if ((syscall_index & 0x1000) != 0) { // win32k syscall
+        return Syscall_Api_Invoke32(proc, parms);
+    }
+#endif
+
+    syscall_index = (syscall_index & 0xFFF);
 
     //DbgPrint("[syscall] request for service %d / %08X\n", syscall_index, syscall_index);
 
@@ -935,6 +1049,17 @@ _FX NTSTATUS Syscall_Api_Query(PROCESS *proc, ULONG64 *parms)
     ULONG *ptr;
     SYSCALL_ENTRY *entry;
 
+#ifdef HOOK_WIN32K
+    if (parms[2] == 1) { // 1 - win32k
+        return Syscall_Api_Query32(proc, parms);
+    }
+    else if (parms[2] != 0) { // 0 - ntoskrnl
+        return STATUS_INVALID_PARAMETER;
+    }
+#endif
+
+    BOOLEAN add_names = parms[3] != 0;
+
     //
     // caller must be our service process
     //
@@ -949,7 +1074,7 @@ _FX NTSTATUS Syscall_Api_Query(PROCESS *proc, ULONG64 *parms)
     buf_len = sizeof(ULONG)         // size of buffer
             + sizeof(ULONG)         // offset to extra data (for SbieSvc)
             + (32 * 4)              // saved code from ntdll
-            + List_Count(&Syscall_List) * sizeof(ULONG) * 2
+            + List_Count(&Syscall_List) * ((sizeof(ULONG) * 2) + (add_names ? 64 : 0))
             + sizeof(ULONG) * 2     // final terminator entry
             ;
 
@@ -992,6 +1117,11 @@ _FX NTSTATUS Syscall_Api_Query(PROCESS *proc, ULONG64 *parms)
         ++ptr;
         *ptr = entry->ntdll_offset;
         ++ptr;
+        if (add_names) {
+            memcpy(ptr, entry->name, entry->name_len);
+            ((char*)ptr)[entry->name_len] = 0;
+            ptr += 16; // 16 * sizeog(ULONG) = 64
+        }
 
         entry = List_Next(entry);
     }
