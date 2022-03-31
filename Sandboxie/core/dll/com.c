@@ -3403,7 +3403,7 @@ _FX void Com_Trace2(
     //ptr[1] = L'\0';
     //OutputDebugString(text);
     *ptr = L'\0';
-    SbieApi_MonitorPut(MONITOR_COMCLASS | monflag, text);
+    SbieApi_MonitorPut2(MONITOR_COMCLASS | monflag, text, FALSE);
 
     Com_Free(text);
 }
@@ -3420,7 +3420,7 @@ _FX void Com_Monitor(REFCLSID rclsid, ULONG monflag)
 
         WCHAR text[160];
         Com_Trace_Guid(text, rclsid, L"CLSID");
-        SbieApi_MonitorPut(MONITOR_COMCLASS | monflag, text);
+        SbieApi_MonitorPut2(MONITOR_COMCLASS | monflag, text, FALSE);
     }
 }
 
@@ -3505,13 +3505,18 @@ _FX void Com_LoadRTList(const WCHAR* setting, WCHAR** pNames)
 
 _FX BOOLEAN Com_IsClosedRT(const wchar_t* strClassId)
 {
-    if ((Dll_ProcessFlags & SBIE_FLAG_APP_COMPARTMENT) == 0) { // in complartment mode those should work fine as we have a normal token
+    //
+    // Even in compartment mode thes things don't work only incombination with open COM its functional
+    //
+
+    if (!(Ipc_OpenCOM && Dll_CompartmentMode) && !SbieApi_QueryConfBool(NULL, L"DisableRTBlacklist", FALSE)) {
 
         //
         // Chrome uses the FindAppUriHandlersAsync, which fails returning a NULL value when we don't have com open and more rights
         // than we should have. Chrome does not check for this failure mode and dereferences it, resulting in a fatal crash.
         // Since we don't support modern app features anyways, the simplest workaround is to block this interface.
         //
+
         if (Dll_ImageType == DLL_IMAGE_GOOGLE_CHROME) {
 
             if (wcscmp(strClassId, L"Windows.System.Launcher") == 0)
@@ -3519,9 +3524,11 @@ _FX BOOLEAN Com_IsClosedRT(const wchar_t* strClassId)
         }
 
         //
-        // this seems to be broken as well
-        //if (wcscmp(strClassId, L"Windows.UI.Notifications.ToastNotificationManager") == 0)
-        //    return TRUE;
+        // ToastNotificationManager requirers open com and original token, with boxed com this causes in a dead lock
+        //
+
+        if (wcscmp(strClassId, L"Windows.UI.Notifications.ToastNotificationManager") == 0)
+            return TRUE;
     }
 
     static const WCHAR* setting = L"ClosedRT";
@@ -3550,11 +3557,11 @@ _FX HRESULT Com_RoGetActivationFactory(HSTRING activatableClassId, REFIID  iid, 
     const wchar_t* strClassId = __sys_WindowsGetStringRawBuffer(activatableClassId, NULL);
 
     if (Com_IsClosedRT(strClassId)) {
-        SbieApi_MonitorPut(MONITOR_RTCLASS | MONITOR_DENY, strClassId);
+        SbieApi_MonitorPut2(MONITOR_RTCLASS | MONITOR_DENY, strClassId, FALSE);
         return E_ACCESSDENIED;
     }
 
-    SbieApi_MonitorPut(MONITOR_RTCLASS, strClassId);
+    SbieApi_MonitorPut2(MONITOR_RTCLASS, strClassId, FALSE);
     return __sys_RoGetActivationFactory(activatableClassId, iid, factory);
 }
 

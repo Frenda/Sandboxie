@@ -21,23 +21,22 @@ CSbieModel::~CSbieModel()
 
 QList<QVariant> CSbieModel::MakeProcPath(const QString& BoxName, const CBoxedProcessPtr& pProcess, const QMap<quint32, CBoxedProcessPtr>& ProcessList)
 {
-	QList<QVariant> Path = MakeProcPath(pProcess, ProcessList);
+	QList<QVariant> Path;
+	MakeProcPath(pProcess, ProcessList, Path);
 	Path.prepend(BoxName);
 	return Path;
 }
 
-QList<QVariant> CSbieModel::MakeProcPath(const CBoxedProcessPtr& pProcess, const QMap<quint32, CBoxedProcessPtr>& ProcessList)
+void CSbieModel::MakeProcPath(const CBoxedProcessPtr& pProcess, const QMap<quint32, CBoxedProcessPtr>& ProcessList, QList<QVariant>& Path)
 {
 	quint32 ParentID = pProcess->GetParendPID();
 	CBoxedProcessPtr pParent = ProcessList.value(ParentID);
 
-	QList<QVariant> Path;
-	if (!pParent.isNull() && ParentID != pProcess->GetProcessId())
+	if (!pParent.isNull() && ParentID != pProcess->GetProcessId() && !Path.contains(ParentID))
 	{
-		Path = MakeProcPath(pParent, ProcessList);
-		Path.append(ParentID);
+		Path.prepend(ParentID);
+		MakeProcPath(pParent, ProcessList, Path);
 	}
-	return Path;
 }
 
 bool CSbieModel::TestProcPath(const QList<QVariant>& Path, const QString& BoxName, const CBoxedProcessPtr& pProcess, const QMap<quint32, CBoxedProcessPtr>& ProcessList, int Index)
@@ -196,14 +195,17 @@ QList<QVariant> CSbieModel::Sync(const QMap<QString, CSandBoxPtr>& BoxList, cons
 		QMap<quint32, CBoxedProcessPtr> ProcessList = pBox->GetProcessList();
 
 		bool inUse = Sync(pBox, pNode->Path, ProcessList, New, Old, Added);
+		bool Busy = pBoxEx->IsBusy();
 		int boxType = pBoxEx->GetType();
 		
-		if (pNode->inUse != inUse || pNode->boxType != boxType)
+		if (pNode->inUse != inUse || (pNode->busyState || Busy) || pNode->boxType != boxType)
 		{
 			pNode->inUse = inUse;
 			pNode->boxType = boxType;
+			if(Busy) pNode->busyState = (pNode->busyState == 1) ? 2 : 1; // make it flach, the cheep way
+			else	 pNode->busyState = 0;
 			//pNode->Icon = pNode->inUse ? m_BoxInUse : m_BoxEmpty;
-			pNode->Icon = theGUI->GetBoxIcon(boxType, inUse);
+			pNode->Icon = theGUI->GetBoxIcon(boxType, inUse, pNode->busyState == 1);
 			Changed = 1; // set change for first column
 		}
 

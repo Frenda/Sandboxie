@@ -138,6 +138,15 @@
     <ClCompile Include="Windows\FileBrowserWindow.cpp">
       <Filter>Windows</Filter>
     </ClCompile>
+    <ClCompile Include="BoxJob.cpp">
+      <Filter>SandMan</Filter>
+    </ClCompile>
+    <ClCompile Include="SbieProcess.cpp">
+      <Filter>SandMan</Filter>
+    </ClCompile>
+    <ClCompile Include="Models\MonitorModel.cpp">
+      <Filter>Models</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stdafx.h">
@@ -199,6 +208,15 @@
     <QtMoc Include="Windows\FileBrowserWindow.h">
       <Filter>Windows</Filter>
     </QtMoc>
+    <QtMoc Include="BoxJob.h">
+      <Filter>SandMan</Filter>
+    </QtMoc>
+    <QtMoc Include="SbieProcess.h">
+      <Filter>SandMan</Filter>
+    </QtMoc>
+    <QtMoc Include="Models\MonitorModel.h">
+      <Filter>Models</Filter>
+    </QtMoc>
   </ItemGroup>
   <ItemGroup>
     <QtRcc Include="Resources\SandMan.qrc">
@@ -249,7 +267,10 @@
     <None Include="sandman_fr.ts">
       <Filter>Translation Files</Filter>
     </None>
-    <None Include="sandman_pt.ts">
+    <None Include="sandman_pt_BR.ts">
+      <Filter>Translation Files</Filter>
+    </None>
+    <None Include="sandman_pt_PT.ts">
       <Filter>Translation Files</Filter>
     </None>
     <None Include="sandman_ru.ts">
@@ -267,7 +288,7 @@
     <None Include="sandman_pl.ts">
       <Filter>Translation Files</Filter>
     </None>
-    <None Include="sandman_ua.ts">
+    <None Include="sandman_uk.ts">
       <Filter>Translation Files</Filter>
     </None>
     <None Include="sandman_zh_CN.ts">
@@ -283,6 +304,9 @@
       <Filter>Translation Files</Filter>
     </None>
     <None Include="sandman_en.ts">
+      <Filter>Translation Files</Filter>
+    </None>
+    <None Include="sandman_cs.ts">
       <Filter>Translation Files</Filter>
     </None>
   </ItemGroup>

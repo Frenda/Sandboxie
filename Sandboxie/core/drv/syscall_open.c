@@ -21,6 +21,7 @@
 //---------------------------------------------------------------------------
 
 #include "conf.h"
+#include "obj.h"
 
 //---------------------------------------------------------------------------
 // Functions
@@ -403,7 +404,154 @@ _FX NTSTATUS Syscall_OpenHandle(
 _FX NTSTATUS Syscall_GetNextProcess(
     PROCESS *proc, SYSCALL_ENTRY *syscall_entry, ULONG_PTR *user_args)
 {
-    return STATUS_ACCESS_DENIED;
+    if (Obj_CallbackInstalled) // ObCallbacks takes care of that already
+        return Syscall_Invoke(syscall_entry, user_args); // so here we can just allow the execution
+
+    // ToDo: make this syscall work
+
+
+    NTSTATUS status;
+    NTSTATUS orig_status;
+    HANDLE *UserHandlePtr;
+    HANDLE *TlsPtr;
+    HANDLE TlsValue;
+    HANDLE NewHandle;
+    HANDLE OldHandle = (HANDLE)user_args[0];
+    ACCESS_MASK DesiredAccess = (ACCESS_MASK)user_args[1];
+    PEPROCESS ProcessObject;
+    
+next:
+
+    //
+    // replace the address of the handle in the user stack
+    //
+
+    UserHandlePtr = Syscall_ReplaceTargetHandle(
+                                (HANDLE *)&user_args[4], TRUE,
+                                &TlsPtr, &TlsValue);
+
+    //
+    // execute the syscall to get the handle into the TLS, then extract
+    // the handle value and restore the original value at the TLS slot
+    //
+    // save the original return code from the syscall, in case there is
+    // a non-zero success status code (see also Syscall_OpenHandle)
+    //
+    // if the syscall did not complete due to an APC, then we abort early
+    //
+
+    status = Syscall_Invoke(syscall_entry, user_args);
+
+    orig_status = status;
+
+    NewHandle = Syscall_RestoreTargetHandle(
+                                &user_args[4], UserHandlePtr,
+                                TlsPtr, TlsValue);
+
+    if (! NewHandle) {
+
+        //WCHAR trace_str[128];
+        //RtlStringCbPrintfW(trace_str, sizeof(trace_str), L"Syscall %.*S security violation terminating process", max(strlen(syscall_entry->name), 64), syscall_entry->name);
+        //Session_MonitorPut(MONITOR_OTHER, trace_str, PsGetCurrentProcessId());
+
+        Process_SetTerminated(proc, 8);
+        status = STATUS_PROCESS_IS_TERMINATING;
+    }
+
+    //
+    // always close the old handle we were nto allowed to access
+    //
+
+    if (OldHandle != (HANDLE)user_args[0]) {
+
+        NtClose((HANDLE)user_args[0]);
+    }
+
+    //
+    // return on error if an APC interrupted the syscall
+    //
+
+    if ((! NT_SUCCESS(status)) || (status == STATUS_USER_APC))
+        return status;
+    
+    //
+    // check if the caller is allowed to access this process
+    //
+
+    status = ObReferenceObjectByHandle(NewHandle, 0, *PsProcessType, UserMode, &ProcessObject, NULL);
+
+    if (NT_SUCCESS(status)) {
+
+        status = Thread_CheckObject_Common(proc, ProcessObject, DesiredAccess, TRUE, FALSE);
+
+        ObDereferenceObject(ProcessObject);
+    }
+    
+    if (!NT_SUCCESS(status)) {
+
+        //
+        // if we are not alowed to open this process, try the next one, don't forget to close this handle!
+        //
+
+        user_args[0] = (ULONG_PTR)NewHandle;
+
+        goto next;
+    }
+
+    //
+    // if all went well, copy the opened handle into the first parameter
+    //
+
+    if (NT_SUCCESS(status)) {
+
+        __try {
+
+            if (UserHandlePtr)
+                *UserHandlePtr = NewHandle;
+            status = orig_status;
+
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+
+            status = STATUS_PROCESS_IS_TERMINATING;
+        }
+    }
+
+    return status;
+}
+
+//---------------------------------------------------------------------------
+// Syscall_GetNextThread
+//---------------------------------------------------------------------------
+
+_FX NTSTATUS Syscall_GetNextThread(
+    PROCESS *proc, SYSCALL_ENTRY *syscall_entry, ULONG_PTR *user_args)
+{
+    NTSTATUS status;
+    HANDLE ProcessHandle = (HANDLE)user_args[0];
+    ACCESS_MASK DesiredAccess = (ACCESS_MASK)user_args[2];
+    PEPROCESS ProcessObject;
+
+    if (Obj_CallbackInstalled) // ObCallbacks takes care of that already
+        return Syscall_Invoke(syscall_entry, user_args); // so here we can just allow the execution
+
+    //
+    // check if the caller is allowed to access this process, we don't filter on a per thread basis
+    //
+
+    status = ObReferenceObjectByHandle(ProcessHandle, 0, *PsProcessType, UserMode, &ProcessObject, NULL);
+
+    if (NT_SUCCESS(status)) {
+
+        status = Thread_CheckObject_Common(proc, ProcessObject, DesiredAccess, FALSE, FALSE);
+
+        ObDereferenceObject(ProcessObject);
+    }
+
+    if (!NT_SUCCESS(status)) 
+        return STATUS_ACCESS_DENIED;
+
+    // if all checks apssed we can llow the execution of this syscall
+    return Syscall_Invoke(syscall_entry, user_args);
 }
 
 //---------------------------------------------------------------------------

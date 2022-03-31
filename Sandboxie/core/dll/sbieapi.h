@@ -47,6 +47,8 @@ extern "C" {
 // Sandboxie API Calls
 //---------------------------------------------------------------------------
 
+SBIEAPI_EXPORT
+long SbieApi_Ioctl(ULONG64* parms);
 
 SBIEAPI_EXPORT
 LONG SbieApi_Call(ULONG api_code, LONG arg_num, ...);
@@ -88,6 +90,7 @@ SBIEAPI_EXPORT
 LONG SbieApi_GetHomePath(
     WCHAR *NtPath, ULONG NtPathMaxLen,
     WCHAR *DosPath, ULONG DosPathMaxLen);
+
 
 
 //---------------------------------------------------------------------------
@@ -203,6 +206,11 @@ LONG SbieApi_MonitorPut2(
     ULONG Type,
     const WCHAR *Name,
     BOOLEAN bCheckObjectExists);
+
+SBIEAPI_EXPORT
+    LONG SbieApi_MonitorPutMsg(
+    ULONG Type,
+    const WCHAR *Message);
 
 //SBIEAPI_EXPORT
 //LONG SbieApi_MonitorGet(

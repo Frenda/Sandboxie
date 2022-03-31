@@ -170,6 +170,12 @@ ComServer::ComServer(PipeServer *pipeServer)
     pipeServer->Register(MSGID_COM, this, Handler);
 }
 
+ComServer::~ComServer()
+{
+	// cleanup CS
+	DeleteCriticalSection(&m_SlavesLock);
+}
+
 
 //---------------------------------------------------------------------------
 // Handler
@@ -1649,7 +1655,7 @@ void ComServer::DeleteSlaveObject(void *_obj, LIST *ObjectsList)
     while (obj2) {
         if (obj2->pUnknown == obj->pUnknown)
             ++objcount;
-        obj2 = (COM_OBJECT *)List_Next(obj2);;
+        obj2 = (COM_OBJECT *)List_Next(obj2);
     }
 
 #ifdef DEBUG_COMSERVER

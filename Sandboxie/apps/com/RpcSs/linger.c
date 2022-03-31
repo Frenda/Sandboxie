@@ -113,7 +113,7 @@ void RemovePid(ULONG myPid)
 
 void AddPid(ULONG *myPids, ULONG count)
 {
-    for (ULONG i = 0; i <= count; i++)
+    for (ULONG i = 0; i < count; i++)
     {
         if (map_get(&pidMap, (void*)myPids[i]) == NULL) { // not yet listed
             MONITOR_PID monitorPid;
@@ -271,36 +271,39 @@ int DoLingerLeader(void)
             Add_LL_Entry(lingers, &linger_count, image);
         }
 
-        //
-        // see which of the LingerProcess programs were already active
-        // before SandboxieRpcSs started.  they will not be considered
-        // LingerProcess programs and will not be terminated
-        //
+        if (SbieApi_QueryConfBool(NULL, L"LingerLeniency", TRUE)) {
 
-        ULONG pid_count = 0;
-        SbieApi_EnumProcessEx(NULL, FALSE, -1, NULL, &pid_count); // query count
-        pid_count += 128;
+            //
+            // see which of the LingerProcess programs were already active
+            // before SandboxieRpcSs started.  they will not be considered
+            // LingerProcess programs and will not be terminated
+            //
 
-        ULONG* pids = HeapAlloc(
-            GetProcessHeap(), HEAP_GENERATE_EXCEPTIONS, sizeof(ULONG) * pid_count);
-        SbieApi_EnumProcessEx(NULL, FALSE, -1, pids, &pid_count); // query pids
+            ULONG pid_count = 0;
+            SbieApi_EnumProcessEx(NULL, FALSE, -1, NULL, &pid_count); // query count
+            pid_count += 128;
 
-        AddPid(pids, pid_count);
+            ULONG* pids = HeapAlloc(
+                GetProcessHeap(), HEAP_GENERATE_EXCEPTIONS, sizeof(ULONG) * pid_count);
+            SbieApi_EnumProcessEx(NULL, FALSE, -1, pids, &pid_count); // query pids
 
-        for (i = 0; i <= pid_count; ++i) {
+            AddPid(pids, pid_count);
 
-            pids_i = (HANDLE) (ULONG_PTR) pids[i];
-            SbieApi_QueryProcess(pids_i, NULL, image, NULL, NULL);
+            for (i = 0; i < pid_count; ++i) {
 
-            for (j = 0; j < linger_count; ++j) {
-                if (_wcsicmp(lingers[j]->image, image) == 0) {
-                    lingers[j]->orig_pid = pids_i;
-                    break;
+                pids_i = (HANDLE)(ULONG_PTR)pids[i];
+                SbieApi_QueryProcess(pids_i, NULL, image, NULL, NULL);
+
+                for (j = 0; j < linger_count; ++j) {
+                    if (_wcsicmp(lingers[j]->image, image) == 0) {
+                        lingers[j]->orig_pid = pids_i;
+                        break;
+                    }
                 }
             }
-        }
 
-        HeapFree(GetProcessHeap(), 0, pids);
+            HeapFree(GetProcessHeap(), 0, pids);
+        }
 
         //
         // add standard lingers.  note that we don't check if any of
@@ -360,26 +363,20 @@ int DoLingerLeader(void)
             SbieDll_StartBoxedService(image, TRUE);
         }
 
+        ULONG buf_len = 4096 * sizeof(WCHAR);
+        WCHAR* buf1 = HeapAlloc(GetProcessHeap(), HEAP_GENERATE_EXCEPTIONS | HEAP_ZERO_MEMORY, buf_len);
+
         for (i = 0; ; ++i) {
 
             rc = SbieApi_QueryConfAsIs(
-                NULL, L"StartProgram", i, image, sizeof(WCHAR) * 120);
+                NULL, L"StartProgram", i, buf1, buf_len - 16);
             if (rc != 0)
                 break;
 
-            SbieDll_ExpandAndRunProgram(image);
+            SbieDll_ExpandAndRunProgram(buf1);
         }
 
-        WCHAR Cmd[8191];
-        for (i = 0; ; ++i) {
-
-            rc = SbieApi_QueryConfAsIs(
-                NULL, L"StartCommand", i, Cmd, sizeof(Cmd));
-            if (rc != 0)
-                break;
-
-            SbieDll_RunStartExe(Cmd, NULL);
-        }
+        HeapFree(GetProcessHeap(), 0, buf1);
     }
 
     //
@@ -439,8 +436,7 @@ int DoLingerLeader(void)
 
                 // Note: since we normally no longer start services as system this is pointless
 
-                //HANDLE ProcessHandle = 0;
-                //SbieApi_OpenProcess(&ProcessHandle, pids_i);
+                //HANDLE ProcessHandle = SbieDll_OpenProcess(PROCESS_QUERY_INFORMATION, pids_i);
                 //if (ProcessHandle) {
                 //    if (SbieDll_CheckProcessLocalSystem(ProcessHandle))
                 //        is_local_system_sid = TRUE;
@@ -448,6 +444,7 @@ int DoLingerLeader(void)
                 //}
                 //
                 //if (!is_local_system_sid) 
+                if (SbieApi_QueryConfBool(NULL, L"LingerLeniency", TRUE))
                 {
                     //
                     // then check if the process was started explicitly
@@ -603,6 +600,9 @@ do_kill_all:
             break;
         }
     }
+
+	// cleanup CS
+	DeleteCriticalSection(&ProcessCritSec);
 
     // this process is no longer needed
 

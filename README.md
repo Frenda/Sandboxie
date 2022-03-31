@@ -1,12 +1,14 @@
 # Sandboxie
-[![GitHub Release](https://img.shields.io/github/release/sandboxie-plus/Sandboxie.svg)](https://github.com/sandboxie-plus/Sandboxie/releases/latest) [![GitHub Pre-Release](https://img.shields.io/github/release/sandboxie-plus/Sandboxie/all.svg?label=pre-release)](https://github.com/sandboxie-plus/Sandboxie/releases)
+[![GitHub Release](https://img.shields.io/github/release/sandboxie-plus/Sandboxie.svg)](https://github.com/sandboxie-plus/Sandboxie/releases/latest) [![GitHub Pre-Release](https://img.shields.io/github/release/sandboxie-plus/Sandboxie/all.svg?label=pre-release)](https://github.com/sandboxie-plus/Sandboxie/releases) [![GitHub Build Status](https://github.com/sandboxie-plus/Sandboxie/actions/workflows/main.yml/badge.svg)](https://github.com/sandboxie-plus/Sandboxie/actions)
 
 <img align="left" src="https://user-images.githubusercontent.com/12372772/123517080-8ab20a00-d69f-11eb-8e82-2e18cf6e0303.png">
 Sandboxie is a sandbox-based isolation software for 32-bit and 64-bit Windows NT-based operating systems. It creates a sandbox-like isolated operating environment in which applications can be run or installed without permanently modifying local & mapped drives or the windows registry. An isolated virtual environment allows controlled testing of untrusted programs and web surfing.<br><br>
 
-|  System requirements  |      Release notes     |
-|         :---:         |          :---:         |
-| Windows 7 or higher, 32-bit or 64-bit. |  [CHANGELOG.md](https://github.com/sandboxie-plus/Sandboxie/blob/master/CHANGELOG.md)
+|  System requirements  |      Release notes     |      Security policy      |
+|         :---:         |          :---:         |          :---:            |
+| Windows 7 or higher, 32-bit or 64-bit. |  [CHANGELOG.md](https://github.com/sandboxie-plus/Sandboxie/blob/master/CHANGELOG.md)  |   [SECURITY.md](https://github.com/sandboxie-plus/Sandboxie/blob/master/SECURITY.md)  |
+
+We encourage the developers and security community to conduct research, report issues, and suggest improvements on this code base. However, please do **not** report security vulnerabilities in public GitHub comments. This repository has a SECURITY file with instructions on responsibly reporting security vulnerabilities.
 
 ## Download
 [![GitHub All Releases](https://img.shields.io/github/downloads/sandboxie-plus/Sandboxie/total?style=for-the-badge)](https://github.com/sandboxie-plus/Sandboxie/releases/latest)
@@ -47,21 +49,34 @@ Open Source release
 
 2020 onwards David Xanatos
 
+## Project support / sponsorship
+
+[<img align="left" height="64" width="64" src="https://raw.githubusercontent.com/sandboxie-plus/Sandboxie/master/.github/images/binja-love.png">](https://binary.ninja/)
+Thank you [Vector 35](https://vector35.com/) for providing a [Binary Ninja](https://binary.ninja/) license to help with reverse engineering.
+<br>
+Binary Ninja is a multi-platform interactive disassembler, decompiler, and binary analysis tool for reverse engineers, malware analysts, vulnerability researchers, and software developers.<br>
+<br>
+[<img align="left" height="64" width="64" src="https://raw.githubusercontent.com/sandboxie-plus/Sandboxie/master/.github/images/Icons8_logo.png">](https://icons8.de/)Thank you [Icons8](https://icons8.de/) for providing icons for the project.
+<br>
+<br>
+<br>
+
 ## Helpful Contributors
 - DavidBerdik - Maintainer of [Sandboxie Website Archive](https://github.com/Sandboxie-Website-Archive/sandboxie-website-archive.github.io)
 - diversenok - Security analysis & PoC's
 - stephtr - CI / Certification
 - TechLord - Team-IRA / Reversing
-- hg421 - Security analysis 
+- hg421 - Security analysis / Code reviews
 - typpos - UI suggestions / Documentation / Code reviews
-- isaak654 - UI fixes / Templates / Documentation
+- isaak654 - Templates / Documentation / Code fixes
 - Dyras - Templates additions
 - cricri-pingouin - UI fixes
 - Valinwolf - UI / Icons
 - daveout - UI / Icons
-- mpheath - Author of Plus installer based on Inno Setup
+- mpheath - Author of Plus installer / Code fixes
 - yfdyh000 - Localization support for Plus installer
 - NewKidOnTheBlock - Changelog fixes
+- Naeemh1 - Documentation additions
 
 ## Translators
 - yuhao2348732, nkh0472, yfdyh000, gexgd0419 - Chinese Simplified
@@ -71,7 +86,7 @@ Open Source release
 - bastik-1001 - German
 - isaak654 - Italian
 - 7zip from [Xanasoft topic](https://forum.xanasoft.com/viewtopic.php?f=12&t=4&start=10) - Polish
-- JNylson - Portuguese
+- JNylson - Portuguese and Brazilian Portuguese
 - lufog - Russian
 - sebadamus - Spanish
 - xorcan - Turkish (disabled for inactivity, a new translator is needed)

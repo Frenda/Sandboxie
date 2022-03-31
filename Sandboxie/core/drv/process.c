@@ -58,7 +58,7 @@ static void Process_NotifyProcess(
 #endif
 
 static void Process_NotifyProcessEx(
-    HANDLE ParentId, HANDLE ProcessId, PPS_CREATE_NOTIFY_INFO CreateInfo);
+    PEPROCESS ParentId, HANDLE ProcessId, PPS_CREATE_NOTIFY_INFO CreateInfo);
 
 static PROCESS *Process_Create(
     HANDLE ProcessId, const BOX *box, const WCHAR *image_path,
@@ -742,14 +742,21 @@ _FX PROCESS *Process_Create(
     //
 
     if (!Driver_Certified && !proc->image_sbie) {
-        if (
-#ifdef USE_MATCH_PATH_EX
-            proc->use_rule_specificity || 
-            proc->use_privacy_mode ||
-#endif
-            proc->bAppCompartment) {
 
-            Log_Msg_Process(MSG_6004, proc->box->name, proc->image_name, box->session_id, proc->pid);
+        const WCHAR* exclusive_setting = NULL;
+#ifdef USE_MATCH_PATH_EX
+        if (proc->use_rule_specificity)
+            exclusive_setting = L"UseRuleSpecificity";
+        else if (proc->use_privacy_mode)
+            exclusive_setting = L"UsePrivacyMode";
+        else
+#endif
+        if (proc->bAppCompartment)
+            exclusive_setting = L"NoSecurityIsolation";
+
+        if (exclusive_setting) {
+
+            Log_Msg_Process(MSG_6004, proc->box->name, exclusive_setting, box->session_id, proc->pid);
 
             //Pool_Delete(pool);
             //Process_CreateTerminated(ProcessId, box->session_id);
@@ -1164,6 +1171,34 @@ _FX BOOLEAN Process_NotifyProcess_Create(
         ExReleaseResourceLite(Process_ListLock);
         KeLowerIrql(irql);
 
+#ifdef DRV_BREAKOUT
+        //
+        // check if this process is set up as break out program,
+        // it must't be located in a sandboxed for this to work.
+        //
+
+        BOX* breakout_box = NULL;
+
+        if (box && Process_IsBreakoutProcess(box, ImagePath)) {
+            if(!Driver_Certified)
+                Log_Msg_Process(MSG_6004, box->name, L"BreakoutProcess", box->session_id, CallerId);
+            else {
+                UNICODE_STRING image_uni;
+                RtlInitUnicodeString(&image_uni, ImagePath);
+                if (!Box_IsBoxedPath(box, file, &image_uni)) {
+
+                    check_forced_program = TRUE; // the break out process of one box may be the forced process of an otehr
+                    breakout_box = box;
+                    box = NULL;
+                }
+            }
+        }
+#endif
+
+        //
+        // check forced processes
+        //
+
         if (check_forced_program) {
 
             //
@@ -1171,7 +1206,12 @@ _FX BOOLEAN Process_NotifyProcess_Create(
             // check if it might be a forced process
             //
 
-            box = Process_GetForcedStartBox(ProcessId, ParentId, ImagePath, FALSE);
+            const WCHAR* pSidString = NULL;
+#ifdef DRV_BREAKOUT
+            if (breakout_box)
+                pSidString = breakout_box->sid;
+#endif
+            box = Process_GetForcedStartBox(ProcessId, ParentId, ImagePath, &bHostInject, pSidString);
 
             if (box == (BOX *)-1) {
 
@@ -1180,27 +1220,37 @@ _FX BOOLEAN Process_NotifyProcess_Create(
 
             } else if (box) {
 
-                process_is_forced = TRUE;
-                add_process_to_job = TRUE;
-            }
-            else
-            {
-                box = Process_GetForcedStartBox(ProcessId, ParentId, ImagePath, TRUE);
+                if (bHostInject) {
 
-                if (box == (BOX *)-1) {
-
-                    create_terminated = TRUE;
-                    box = NULL;
-
-                }
-                else if (box) {
-
-                    bHostInject = TRUE;
                     add_process_to_job = FALSE;
 
+                } else {
+
+                    process_is_forced = TRUE;
+                    add_process_to_job = TRUE;
                 }
             }
         }
+
+#ifdef DRV_BREAKOUT
+        //
+        // if this is a break out process and no other box clamed it as forced, 
+        // set bHostInject and threat it accordingly, we need this in order for
+        // the custom SetInformationProcess call from CreateProcessInternalW to succeed
+        //
+
+        if (breakout_box) {
+            if (!box) {
+                bHostInject = TRUE;
+                add_process_to_job = FALSE;
+                box = breakout_box;
+            }
+            else {
+                Box_Free(breakout_box);
+                breakout_box = NULL;
+            }
+        }
+#endif
 
         //
         // if parent is a sandboxed process but for some reason we don't
@@ -1258,22 +1308,32 @@ _FX BOOLEAN Process_NotifyProcess_Create(
             ULONG session_id = new_proc->box->session_id;
 
             new_proc->bHostInject = bHostInject;
+#ifdef DRV_BREAKOUT
+            new_proc->starter_id = CallerId;
+#endif
             new_proc->parent_was_start_exe = parent_was_start_exe;
             new_proc->rights_dropped = parent_had_rights_dropped;
             new_proc->forced_process = process_is_forced;
 
-            if (! bHostInject)
-            {
-				WCHAR msg[48], *buf = msg;
-				RtlStringCbPrintfW(buf, sizeof(msg), L"%s%c%d", new_proc->box->name, L'\0', (ULONG)ParentId);
-                buf += wcslen(buf) + 1;
-				Log_Popup_MsgEx(MSG_1399, new_proc->image_path, wcslen(new_proc->image_path), msg, (ULONG)(buf - msg), new_proc->box->session_id, ProcessId);
+            if (! bHostInject) {
+
+                //
+                // Notify the agent about the new process using a specialized silent message
+                //
+
+				WCHAR sParentId[12];
+                _ultow_s((ULONG)ParentId, sParentId, 12, 10);
+                const WCHAR* strings[4] = { new_proc->image_path, new_proc->box->name, sParentId, NULL };
+                Api_AddMessage(MSG_1399, strings, NULL, new_proc->box->session_id, (ULONG)ProcessId);
 
                 if (! add_process_to_job)
                     new_proc->parent_was_sandboxed = TRUE;
 
+                add_process_to_job = TRUE; // we need this because of JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK used in GuiServer::GetJobObjectForAssign
+
                 //
                 // don't put the process into a job if OpenWinClass=*
+                // don't put the process into a job if NoSecurityIsolation=y
                 //
 
 				if (new_proc->open_all_win_classes || new_proc->bAppCompartment || Conf_Get_Boolean(new_proc->box->name, L"NoAddProcessToJob", 0, FALSE)) {
@@ -1290,7 +1350,6 @@ _FX BOOLEAN Process_NotifyProcess_Create(
 
                     new_proc->can_use_jobs = Conf_Get_Boolean(new_proc->box->name, L"AllowBoxedJobs", 0, FALSE);
                 }
-
 
                 //
                 // on Windows Vista, a forced process may start inside a
