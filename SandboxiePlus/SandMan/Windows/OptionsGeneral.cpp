@@ -71,6 +71,8 @@ void COptionsWindow::CreateGeneral()
 	connect(ui.chkOpenCredentials, SIGNAL(clicked(bool)), this, SLOT(OnGeneralChanged()));
 	connect(ui.chkOpenProtectedStorage, SIGNAL(clicked(bool)), this, SLOT(OnGeneralChanged()));
 	connect(ui.chkCloseClipBoard, SIGNAL(clicked(bool)), this, SLOT(OnGeneralChanged()));
+	connect(ui.chkVmRead, SIGNAL(clicked(bool)), this, SLOT(OnVmRead()));
+	connect(ui.chkVmReadNotify, SIGNAL(clicked(bool)), this, SLOT(OnGeneralChanged()));
 	//connect(ui.chkOpenSmartCard, SIGNAL(clicked(bool)), this, SLOT(OnGeneralChanged()));
 	//connect(ui.chkOpenBluetooth, SIGNAL(clicked(bool)), this, SLOT(OnGeneralChanged()));
 
@@ -123,6 +125,7 @@ void COptionsWindow::LoadGeneral()
 	ui.chkOpenProtectedStorage->setChecked(m_pBox->GetBool("OpenProtectedStorage", false));
 	ui.chkOpenCredentials->setChecked(!ui.chkOpenCredentials->isEnabled() || m_pBox->GetBool("OpenCredentials", false));
 	ui.chkCloseClipBoard->setChecked(!m_pBox->GetBool("OpenClipboard", true));
+	ui.chkVmReadNotify->setChecked(m_pBox->GetBool("NotifyProcessAccessDenied", false));
 	//ui.chkOpenSmartCard->setChecked(m_pBox->GetBool("OpenSmartCard", true));
 	//ui.chkOpenBluetooth->setChecked(m_pBox->GetBool("OpenBluetooth", false));
 
@@ -179,6 +182,7 @@ void COptionsWindow::SaveGeneral()
 	if (ui.chkOpenCredentials->isEnabled())
 		WriteAdvancedCheck(ui.chkOpenCredentials, "OpenCredentials", "y", "");
 	WriteAdvancedCheck(ui.chkCloseClipBoard, "OpenClipboard", "n", "");
+	WriteAdvancedCheck(ui.chkVmReadNotify, "NotifyProcessAccessDenied", "y", "");
 	//WriteAdvancedCheck(ui.chkOpenSmartCard, "OpenSmartCard", "", "n");
 	//WriteAdvancedCheck(ui.chkOpenBluetooth, "OpenBluetooth", "y", "");
 
@@ -359,5 +363,15 @@ void COptionsWindow::OnBoxTypChanged()
 	m_HoldBoxType = true;
 	UpdateBoxType();
 	m_HoldBoxType = false;
+	OnOptChanged();
+}
+
+void COptionsWindow::OnVmRead()
+{
+	if (ui.chkVmRead->isChecked())
+		SetAccessEntry(eIPC, "", eReadOnly, "$:*");
+	else
+		DelAccessEntry(eIPC, "", eReadOnly, "$:*");
+	m_AdvancedChanged = true;
 	OnOptChanged();
 }

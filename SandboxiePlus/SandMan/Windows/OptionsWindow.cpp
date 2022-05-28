@@ -286,6 +286,8 @@ COptionsWindow::COptionsWindow(const QSharedPointer<CSbieIni>& pBox, const QStri
 
 	LoadConfig();
 
+	UpdateCurrentTab();
+
 	ui.buttonBox->button(QDialogButtonBox::Apply)->setEnabled(false);
 
 	ui.treeAccess->viewport()->installEventFilter(this);
@@ -405,6 +407,8 @@ void COptionsWindow::LoadConfig()
 {
 	m_ConfigDirty = false;
 
+	m_HoldChange = true;
+
 	LoadGeneral();
 
 	LoadGroups();
@@ -429,6 +433,8 @@ void COptionsWindow::LoadConfig()
 	LoadTemplates();
 	
 	UpdateBoxType();
+
+	m_HoldChange = false;
 }
 
 void COptionsWindow::WriteAdvancedCheck(QCheckBox* pCheck, const QString& Name, const QString& Value)
@@ -658,7 +664,10 @@ void COptionsWindow::OnTab()
 
 void COptionsWindow::UpdateCurrentTab()
 {
-	if (ui.tabs->currentWidget() == ui.tabStart)
+	if (ui.tabs->currentWidget() == ui.tabGeneral) {
+		ui.chkVmRead->setChecked(GetAccessEntry(eIPC, "", eReadOnly, "$:*") != NULL);
+	}
+	else if (ui.tabs->currentWidget() == ui.tabStart)
 	{
 		if (GetAccessEntry(eIPC, "!<StartRunAccess>", eClosed, "*") != NULL)
 			ui.radStartSelected->setChecked(true);
@@ -677,8 +686,6 @@ void COptionsWindow::UpdateCurrentTab()
 		CheckINetBlock();
 
 		LoadBlockINet();
-
-		OnBlockINet();
 	}
 	else if (ui.tabs->currentWidget() == ui.tabAdvanced)
 	{

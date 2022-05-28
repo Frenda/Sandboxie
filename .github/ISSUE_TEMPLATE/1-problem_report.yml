@@ -1,11 +1,13 @@
 name: Problem report
 description: Please report your problem here to help us improve
-
+labels: ["Confirmation pending"]
 body:
   - type: markdown
     attributes:
       value: |
         Thanks for taking the time to fill out this report!
+        To see if your problem has already been reported, you can use the search box on the Issues and Discussions tabs.
+        Also, you may find your answer in our documentation hosted on GitHub: https://sandboxie-plus.github.io/sandboxie-docs
   - type: textarea
     id: what-happened
     attributes:
@@ -183,13 +185,3 @@ body:
         .....
 
       render: shell
-  - type: input
-    id: sandboxie-plus-config
-    attributes:
-      label: Sandboxie-Plus.ini configuration (for Plus interface issues)
-      description: |
-        Sandboxie-Plus.ini is only needed if you have specific user interface issues with Sandboxie Plus
-        (this is usually located in `C:\Users\%Username%\AppData\Local\Sandboxie-Plus` or `C:\ProgramData\Sandboxie-Plus` for corporate users).
-
-        Please copy the content on https://gist.github.com and share the resulting link below.
-      placeholder: https://

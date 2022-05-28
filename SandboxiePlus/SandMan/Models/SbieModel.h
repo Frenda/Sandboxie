@@ -3,7 +3,8 @@
 #include "../SbiePlusAPI.h"
 #include "../SbieProcess.h"
 #include "../../MiscHelpers/Common/TreeItemModel.h"
-
+#include <QMimeData>
+#include <QFileIconProvider>
 
 class CSbieModel : public CTreeItemModel
 {
@@ -17,6 +18,7 @@ public:
 
 	CSandBoxPtr		GetSandBox(const QModelIndex &index) const;
 	CBoxedProcessPtr GetProcess(const QModelIndex &index) const;
+	QString			GetGroup(const QModelIndex &index) const;
 	QVariant		GetID(const QModelIndex &index) const;
 
 	enum ETypes
@@ -27,6 +29,13 @@ public:
 		eProcess
 	}				GetType(const QModelIndex &index) const;
 
+	Qt::DropActions supportedDropActions() const { return Qt::MoveAction; }
+	Qt::ItemFlags	flags(const QModelIndex& index) const;
+	QStringList mimeTypes() { return QStringList() << m_SbieModelMimeType; }
+	QMimeData* mimeData(const QModelIndexList& indexes) const;
+	bool canDropMimeData(const QMimeData* data, Qt::DropAction action, int row, int column, const QModelIndex& parent) const { return true; }
+	bool dropMimeData(const QMimeData* data, Qt::DropAction action, int row, int column, const QModelIndex& parent);
+
 	int				columnCount(const QModelIndex &parent = QModelIndex()) const;
 	QVariant		headerData(int section, Qt::Orientation orientation, int role = Qt::DisplayRole) const;
 
@@ -36,11 +45,17 @@ public:
 		eProcessId,
 		eTitle,
 		eStatus,
+		eInfo,
+		//eSize,
 		//eLogCount,
-		eTimeStamp,
+		//eTimeStamp,
 		ePath,
 		eCount
 	};
+
+signals:
+	void			MoveBox(const QString& Name, const QString& To);
+	void			MoveGroup(const QString& Name, const QString& To);
 
 protected:
 	bool			Sync(const CSandBoxPtr& pBox, const QList<QVariant>& Path, const QMap<quint32, CBoxedProcessPtr>& ProcessList, QMap<QList<QVariant>, QList<STreeNode*> >& New, QHash<QVariant, STreeNode*>& Old, QList<QVariant>& Added);
@@ -77,4 +92,7 @@ private:
 	//QIcon m_BoxEmpty;
 	//QIcon m_BoxInUse;
 	QIcon m_ExeIcon;
+
+	QString m_SbieModelMimeType;
+	QFileIconProvider m_IconProvider;
 };

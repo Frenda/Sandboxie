@@ -119,6 +119,13 @@ void CSandBox::UpdateDetails()
 {
 }
 
+void CSandBox::SetBoxPaths(const QString& FilePath, const QString& RegPath, const QString& IpcPath)
+{
+	m_FilePath = FilePath;
+	m_RegPath = RegPath;
+	m_IpcPath = IpcPath;
+}
+
 SB_STATUS CSandBox::RunStart(const QString& Command, bool Elevated)
 {
 #ifdef _DEBUG
@@ -140,7 +147,7 @@ SB_STATUS CSandBox::TerminateAll()
 
 bool CSandBox::IsEmpty() const
 {
-	return !QDir(m_FilePath).exists();
+	return !QFile::exists(m_FilePath);
 }
 
 SB_PROGRESS CSandBox::CleanBox()
@@ -215,6 +222,9 @@ SB_STATUS CSandBox__MoveFolder(const QString& SourcePath, const QString& ParentF
 
 SB_STATUS CSandBox::RenameBox(const QString& NewName)
 {
+	if (NewName.compare(m_Name, Qt::CaseInsensitive) == 0)
+		return SB_OK;
+
 	SB_STATUS Status = CSbieAPI::ValidateName(NewName);
 	if (Status.IsError())
 		return Status;
@@ -324,6 +334,8 @@ struct SBoxDataFile
 
 QList<SBoxDataFile> CSandBox__BoxDataFiles = QList<SBoxDataFile>() 
 	<< SBoxDataFile("RegHive", true, false) 
+	<< SBoxDataFile("RegPaths.dat", false, false) 
+	<< SBoxDataFile("FilePaths.dat", false, true)
 ;
 
 bool CSandBox::IsInitialized() const
@@ -362,7 +374,7 @@ SB_PROGRESS CSandBox::TakeSnapshot(const QString& Name)
 	QSettings ini(m_FilePath + "\\Snapshots.ini", QSettings::IniFormat);
 
 	if (m_pAPI->HasProcesses(m_Name))
-		return SB_ERR(SB_SnapIsRunning, OP_CONFIRM);
+		return SB_ERR(SB_SnapIsRunning);
 
 	if (!IsInitialized())
 		return SB_ERR(SB_SnapIsEmpty);
@@ -386,7 +398,7 @@ SB_PROGRESS CSandBox::TakeSnapshot(const QString& Name)
 			if (BoxDataFile.Required)
 				return SB_ERR(SB_SnapCopyDatFail);
 		}
-		else if (BoxDataFile.Required) // this one is incremental, hence delete it from the copy root, after it was copied to the snapshot
+		else if (BoxDataFile.Recursive) // this one is incremental, hence delete it from the copy root, after it was copied to the snapshot
 			QFile::remove(m_FilePath + "\\" + BoxDataFile.Name);
 	}
 
@@ -416,7 +428,7 @@ SB_PROGRESS CSandBox::RemoveSnapshot(const QString& ID)
 		return SB_ERR(SB_SnapNotFound);
 
 	if (m_pAPI->HasProcesses(m_Name))
-		return SB_ERR(SB_SnapIsRunning, OP_CONFIRM);
+		return SB_ERR(SB_SnapIsRunning);
 	
 	QStringList ChildIDs;
 	foreach(const QString& Snapshot, ini.childGroups())
@@ -592,7 +604,7 @@ SB_PROGRESS CSandBox::SelectSnapshot(const QString& ID)
 		return SB_ERR(SB_SnapNotFound);
 
 	if (m_pAPI->HasProcesses(m_Name))
-		return SB_ERR(SB_SnapIsRunning, OP_CONFIRM);
+		return SB_ERR(SB_SnapIsRunning);
 
 	foreach(const SBoxDataFile& BoxDataFile, CSandBox__BoxDataFiles)
 	{

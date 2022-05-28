@@ -47,15 +47,17 @@ public:
 	virtual QString			GetVersion();
 
 	virtual SB_STATUS		TakeOver();
-	virtual SB_STATUS		WatchIni(bool bEnable = true);
+	virtual SB_STATUS		WatchIni(bool bEnable = true, bool bReLoad = true);
 
 	virtual QString			GetSbiePath() const { return m_SbiePath; }
 	virtual QString			GetIniPath() const { return m_IniPath; }
 
+	virtual QString			ResolveAbsolutePath(const QString& Path);
+
 	virtual void			UpdateDriveLetters();
 	virtual QString			Nt2DosPath(QString NtPath, bool* pOk = NULL) const;
 
-	virtual SB_STATUS		ReloadBoxes(bool bFullUpdate = false);
+	virtual SB_STATUS		ReloadBoxes(bool bForceUpdate = false);
 	static  SB_STATUS		ValidateName(const QString& BoxName);
 	virtual SB_STATUS		CreateBox(const QString& BoxName, bool bReLoad = true);
 
@@ -75,8 +77,8 @@ public:
 	virtual bool			GetProcessExemption(quint32 process_id, quint32 action_id);
 
 	virtual QString			GetBoxedPath(const QString& BoxName, const QString& Path);
-	virtual QString			GetBoxedPath(const CSandBoxPtr& pBox, const QString& Path);
-	virtual QString			GetRealPath(const CSandBoxPtr& pBox, const QString& Path);
+	virtual QString			GetBoxedPath(CSandBox* pBox, const QString& Path);
+	virtual QString			GetRealPath(CSandBox* pBox, const QString& Path);
 
 	enum ESetMode
 	{
@@ -156,6 +158,7 @@ signals:
 	void					LogSbieMessage(quint32 MsgCode, const QStringList& MsgData, quint32 ProcessId);
 	void					ProcessBoxed(quint32 ProcessId, const QString& Path, const QString& Box, quint32 ParentId);
 	void					FileToRecover(const QString& BoxName, const QString& FilePath, const QString& BoxPath, quint32 ProcessId);
+	void					BoxOpened(const QString& BoxName);
 	void					BoxClosed(const QString& BoxName);
 	void					NotAuthorized(bool bLoginRequired, bool &bRetry);
 	void					QueuedRequest(quint32 ClientPid, quint32 ClientTid, quint32 RequestId, const QVariantMap& Data);
@@ -226,8 +229,9 @@ protected:
 	QString					m_SbiePath;
 	QString					m_IniPath;
 	QFileSystemWatcher		m_IniWatcher;
-
+	bool					m_IniReLoad;
 	bool					m_bReloadPending;
+	bool					m_bBoxesDirty;
 
 	bool					m_bWithQueue;
 	bool					m_bTerminate;

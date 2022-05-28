@@ -189,8 +189,30 @@ _FX NTSTATUS Syscall_CheckObject(
                             proc->pool, OpenedObject, &Name, &NameLength);
     if (NT_SUCCESS(status)) {
 
+        //
+        // we enforce only CreateSymbolicLinkObject to use copy paths, 
+        // OpenSymbolicLinkObject can use true paths
+        //
+
+        if ((syscall_entry->name_len == 22 && memcmp(syscall_entry->name, "OpenSymbolicLinkObject", 22) == 0))
+            goto finish;
+
+        //
+        // invoke the Ipc_Check[Type]Object handler
+        //
+
         status = syscall_entry->handler2_func(
             proc, OpenedObject, &Name->Name, HandleInfo->GrantedAccess);
+
+        //
+        // process/thread access has its own logging routine
+        //
+
+        if ((syscall_entry->name_len == 11 && memcmp(syscall_entry->name, "OpenProcess", 11) == 0) ||
+            (syscall_entry->name_len == 10 && memcmp(syscall_entry->name, "OpenThread", 10) == 0) ||
+            (syscall_entry->name_len == 21 && memcmp(syscall_entry->name, "AlpcOpenSenderProcess", 21) == 0) ||
+            (syscall_entry->name_len == 20 && memcmp(syscall_entry->name, "AlpcOpenSenderThread", 20) == 0))
+            goto finish;
 
         if ((status != STATUS_SUCCESS)
                             && (status != STATUS_BAD_INITIAL_PC)) {
@@ -200,9 +222,10 @@ _FX NTSTATUS Syscall_CheckObject(
 
             WCHAR msg[256];
             RtlStringCbPrintfW(msg, sizeof(msg), L"%S (%08X) access=%08X initialized=%d", syscall_entry->name, status, HandleInfo->GrantedAccess, proc->initialized);
-			Log_Msg_Process(MSG_2101, msg, puName != NULL ? puName->Buffer : L"Unnamed object", -1, proc->pid);
+			Log_Msg_Process(MSG_2112, msg, puName != NULL ? puName->Buffer : L"Unnamed object", -1, proc->pid);
         }
 
+finish:
         if (Name != &Obj_Unnamed)
             Mem_Free(Name, NameLength);
     }
@@ -459,7 +482,7 @@ next:
     }
 
     //
-    // always close the old handle we were nto allowed to access
+    // always close the old handle we were not allowed to access
     //
 
     if (OldHandle != (HANDLE)user_args[0]) {
@@ -490,7 +513,7 @@ next:
     if (!NT_SUCCESS(status)) {
 
         //
-        // if we are not alowed to open this process, try the next one, don't forget to close this handle!
+        // if we are not allowed to open this process, try the next one, don't forget to close this handle!
         //
 
         user_args[0] = (ULONG_PTR)NewHandle;

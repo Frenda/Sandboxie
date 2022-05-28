@@ -27,7 +27,7 @@
 
 
 //---------------------------------------------------------------------------
-// Fuctions
+// Functions
 //---------------------------------------------------------------------------
 
 
@@ -131,6 +131,20 @@ _FX UCHAR GetSetCustomLevel(UCHAR SetLevel)
     ULONG Wow64 = Dll_IsWin64 ? KEY_WOW64_64KEY : 0;
 
     if (! SetLevel) {
+
+        //
+        // if UseRegDeleteV2 is set, check if RegPaths.dat was loaded
+        // if not it means the box was previusly a V1 box,
+        // hence return 0 and re run customization
+        // 
+        // note: DeleteShellAssocKeys deletes the sandboxie shell integration keys
+        // so the existence of a RegPaths.dat in a customized box is a reliable indicator
+        //
+
+        extern BOOLEAN Key_Delete_v2;
+        extern BOOLEAN Key_RegPaths_Loaded;
+        if (Key_Delete_v2 && !Key_RegPaths_Loaded)
+            return 0;
 
         //
         // open the AutoExec key, also used to indicate if this sandbox
@@ -1136,7 +1150,7 @@ _FX BOOLEAN SbieDll_ExpandAndRunProgram(const WCHAR *Command)
 		wmemcpy(ptr2, ptr, length);
 		ptr2 += len;
 	}
-	wcscpy(ptr2, ptr1); // copy whats left
+	wcscpy(ptr2, ptr1); // copy what's left
 
     Dll_Free(cmdline);
 

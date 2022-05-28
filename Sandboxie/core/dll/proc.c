@@ -291,7 +291,7 @@ static P_WinExec                    __sys_WinExec                   = NULL;
 static P_RunSetupCommandW           __sys_RunSetupCommandW          = NULL;
 
 static P_NtSetInformationProcess    __sys_NtSetInformationProcess   = NULL;
-static P_NtQueryInformationProcess  __sys_NtQueryInformationProcess = NULL;
+       P_NtQueryInformationProcess  __sys_NtQueryInformationProcess = NULL;
 
 static P_NtCreateProcessEx          __sys_NtCreateProcessEx         = NULL;
 
@@ -809,7 +809,7 @@ _FX BOOL Proc_CreateProcessInternalW(
         }*/
 
         //
-        // invoke the real CreateProcessInternal so it can record acurate
+        // invoke the real CreateProcessInternal so it can record accurate
         //
 
         TlsData->proc_create_process_capture_image = TRUE;
@@ -861,7 +861,7 @@ _FX BOOL Proc_CreateProcessInternalW(
     else { // xp, 7, 8 and 10 before RS5
 
         //
-        // invoke the real CreateProcessInternal so it can record acurate
+        // invoke the real CreateProcessInternal so it can record accurate
         // paths in NtCreateSection/Proc_SectionCallback, and then fail.
         //
 
@@ -1022,7 +1022,7 @@ _FX BOOL Proc_CreateProcessInternalW(
                     //
                     // The breakout request is validated by the service, hence we need a clean and complete 
                     // application path and not a just a command line where the binary may be missing the .exe
-                    // and or be only relative to the workign directory, or worse the path variable.
+                    // and or be only relative to the working directory, or worse the path variable.
                     //
 
                     wcscpy(mybuf, L"\"");
@@ -1117,7 +1117,7 @@ _FX BOOL Proc_CreateProcessInternalW(
 
 
     //
-    // in compartment mode we dont mess around just create the process
+    // in compartment mode we don't mess around just create the process
     //
 
     // OriginalToken BEGIN
@@ -2765,6 +2765,17 @@ _FX NTSTATUS Proc_NtQueryInformationProcess(
                 RtlInitUnicodeString((UNICODE_STRING*)ProcessInformation, TruePath);    // return non-sandboxed path so caller can't tell he's sandboxed.
         }
     }
+
+	/*if (ProcessInformationClass == ProcessImageFileName && ProcessInformation != NULL) {
+
+		ULONG tmplen;
+		PUNICODE_STRING fileName = (PUNICODE_STRING)ProcessInformation;
+
+		tmplen = File_NtQueryObjectName(fileName, fileName->MaximumLength);
+
+		if (tmplen)
+			outlen = sizeof(UNICODE_STRING) + tmplen;
+	}*/
 
     return status;
 }

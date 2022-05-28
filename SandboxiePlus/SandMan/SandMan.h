@@ -65,6 +65,8 @@ public:
 
 	void				UpdateTheme();
 
+	void				InstallUpdate();
+
 	void				UpdateCertState();
 	void				UpdateCert();
 
@@ -152,6 +154,7 @@ public slots:
 	void				OnBoxClosed(const QString& BoxName);
 
 	void				CheckForUpdates(bool bManual = true);
+	void				DownloadUpdates(const QString& DownloadUrl, bool bManual);
 
 	void				OpenUrl(const QString& url) { OpenUrl(QUrl(url)); }
 	void				OpenUrl(const QUrl& url);
@@ -176,6 +179,7 @@ private slots:
 
 	void				OnViewMode(QAction* action);
 	void				OnAlwaysTop();
+	void				OnRefresh();
 	void				OnCleanUp();
 	void				OnProcView();
 
@@ -201,9 +205,13 @@ private slots:
 
 	void				SetUITheme();
 
+	void				UpdateLabel();
+
 private:
 	void				CreateMenus();
 	void				CreateToolBar();
+	void				CreateView();
+	void				CreateTrayMenu();
 
 	void				HandleMaintenance(SB_RESULT(void*) Status);
 
@@ -251,6 +259,7 @@ private:
 	QAction*			m_pUninstallSvc;
 	QAction*			m_pStopAll;
 	QAction*			m_pUninstallAll;
+	QAction*			m_pSetupWizard;
 	QAction*			m_pExit;
 
 	QMenu*				m_pMenuView;
@@ -258,6 +267,7 @@ private:
 	QAction*			m_pShowHidden;
 	QAction*			m_pWndTopMost;
 	int					m_iMenuViewPos;
+	QAction*			m_pRefreshAll;
 	QMenu*				m_pCleanUpMenu;
 	QAction*			m_pCleanUpProcesses;
 	QAction*			m_pCleanUpMsgLog;
@@ -273,6 +283,9 @@ private:
 	QAction*			m_pEditIni;
 	QAction*			m_pReloadIni;
 	QAction*			m_pEnableMonitoring;
+
+	QAction*			m_pSeparator;
+	QLabel*				m_pLabel;
 
 	QMenu*				m_pMenuHelp;
 	QAction*			m_pSupport;
@@ -308,6 +321,7 @@ private:
 	QTranslator			m_Translator[2];
 
 public:
+	QString				m_Language;
 	quint32				m_LanguageId;
 	bool				m_DarkTheme;
 };

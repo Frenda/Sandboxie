@@ -172,10 +172,10 @@ _FX BOOLEAN Obj_Init(void)
     //
 
     Obj_ObjectTypes = Mem_AllocEx(
-                            Driver_Pool, sizeof(POBJECT_TYPE) * 9, TRUE);
+                            Driver_Pool, sizeof(POBJECT_TYPE) * 10, TRUE);
     if (! Obj_ObjectTypes)
         return FALSE;
-    memzero(Obj_ObjectTypes, sizeof(POBJECT_TYPE) * 9);
+    memzero(Obj_ObjectTypes, sizeof(POBJECT_TYPE) * 10);
 
     if (! Obj_AddObjectType(L"Job")) // PsJobType
         return FALSE;
@@ -197,6 +197,8 @@ _FX BOOLEAN Obj_Init(void)
         if (! Obj_AddObjectType(L"ALPC Port"))  // AlpcPortObjectType - not exported
             return FALSE;
     }
+    if (! Obj_AddObjectType(L"SymbolicLink")) // ObpSymbolicLinkObjectType - not exported
+        return FALSE;
 
     //DbgPrint("JobObject; Known: %p; Found: %p\r\n", *PsJobType, Obj_ObjectTypes[0]);
 
@@ -642,7 +644,6 @@ _FX POBJECT_TYPE Obj_GetTypeObjectType(void)
                             (POBJECT_TYPE *)(ptr + i + 7 + offset);
                     }
                 }
-                DbgPrint("pObTypeIndexTable = %p\n", pObTypeIndexTable);
             }
 #else ! _WIN64
             UCHAR k = 0;
@@ -659,9 +660,8 @@ _FX POBJECT_TYPE Obj_GetTypeObjectType(void)
                     pObTypeIndexTable = (POBJECT_TYPE *)*ptr2;
                 }
             }
-
 #endif _WIN64
-
+            //DbgPrint("pObTypeIndexTable = %p\n", pObTypeIndexTable);
         }
 
         if (! pObTypeIndexTable) {
