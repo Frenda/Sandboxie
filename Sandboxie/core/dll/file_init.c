@@ -127,6 +127,8 @@ static const WCHAR *File_DeviceMap_EnvVar   = ENV_VAR_PFX L"DEVICE_MAP";
 
 _FX BOOLEAN File_Init(void)
 {
+    HMODULE module = NULL;
+
     void *RtlGetFullPathName_UEx;
     void *GetTempPathW;
     void *NtQueryDirectoryFileEx = NULL;
@@ -142,16 +144,23 @@ _FX BOOLEAN File_Init(void)
 
     File_DriveAddSN = SbieApi_QueryConfBool(NULL, L"UseVolumeSerialNumbers", FALSE);
 
-    File_Delete_v2 = SbieApi_QueryConfBool(NULL, L"UseFileDeleteV2", FALSE);
-
     File_NoReparse = SbieApi_QueryConfBool(NULL, L"NoPathReparse", FALSE);
 
     if (! File_InitDrives(0xFFFFFFFF))
         return FALSE;
 
+    File_Delete_v2 = SbieApi_QueryConfBool(NULL, L"UseFileDeleteV2", FALSE);
     if (File_Delete_v2)
         File_InitDelete_v2();
 
+    // this is here as it requirers file stuff to be set up
+    extern BOOLEAN Key_Delete_v2;
+    BOOLEAN Key_InitDelete_v2();
+    Key_Delete_v2 = SbieApi_QueryConfBool(NULL, L"UseRegDeleteV2", FALSE);
+    if (Key_Delete_v2)
+        Key_InitDelete_v2();
+
+    // this requirers key stuff to be set up
 	if (SbieApi_QueryConfBool(NULL, L"SeparateUserFolders", TRUE)) {
 		if (!File_InitUsers())
 			return FALSE;

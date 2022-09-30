@@ -26,14 +26,21 @@ public:
 	virtual void				SelectBox(const QString& Name);
 
 	virtual void				PopUpMenu(const QString& Name);
+	virtual QMenu*				GetMenu(const QString& Name);
 	virtual void				ShowOptions(const QString& Name);
+	virtual void				ShowOptions(const CSandBoxPtr& pBox);
+	virtual void				ShowBrowse(const CSandBoxPtr& pBox);
 
 	QMap<QString, QStringList>	GetGroups() { return m_Groups; }
+
+signals:
+	void						BoxSelected();
 
 public slots:
 	void						Clear();
 	void						Refresh();
 	void						ReloadUserConfig();
+	void						ClearUserUIConfig(const QMap<QString, CSandBoxPtr> AllBoxes = QMap<QString, CSandBoxPtr>());
 	void						SaveUserConfig();
 
 private slots:
@@ -48,13 +55,14 @@ private slots:
 	void						OnGroupAction(QAction* pAction);
 	void						OnSandBoxAction();
 	void						OnSandBoxAction(QAction* pAction);
+	void						OnSandBoxAction(QAction* pAction, const QList<CSandBoxPtr>& SandBoxes);
 	void						OnProcessAction();
-	void						OnProcessAction(QAction* pAction);
+	void						OnProcessAction(QAction* pAction, const QList<CBoxedProcessPtr>& Processes);
 
 	void						OnExpanded(const QModelIndex& index) { ChangeExpand(index, true); }
 	void						OnCollapsed(const QModelIndex& index) { ChangeExpand(index, false); }
 
-	void						OnMoveItem(const QString& Name, const QString& To);
+	void						OnMoveItem(const QString& Name, const QString& To, int row);
 
 	void						OnRemoveItem();
 
@@ -63,6 +71,7 @@ protected:
 	virtual QTreeView*			GetView() { return m_pSbieTree; }
 	virtual QAbstractItemModel* GetModel() { return m_pSortProxy; }
 
+	virtual void				UpdateStartMenu(CSandBoxPlus* pBoxEx);
 	virtual void				UpdateRunMenu(const CSandBoxPtr& pBox);
 
 	QMap<QString, QStringList>	m_Groups;
@@ -71,17 +80,27 @@ protected:
 
 private:
 
-	bool					UpdateMenu();
-	void					UpdateGroupMenu();
-	void					RenameGroup(const QString OldName, const QString NewName);
-	bool					RenameItem(const QString OldName, const QString NewName);
+	void					CreateMenu();
+	void					CreateOldMenu();
+	void					CreateGroupMenu();
+	void					CreateTrayMenu();
 
-	void					MoveItem(const QString& Name, const QString& To);
+	bool					UpdateMenu(bool bAdvanced, const CSandBoxPtr &pBox, int iSandBoxeCount = 1, bool bBoxBusy = false);
+	void					UpdateProcMenu(const CBoxedProcessPtr &pProcess = CBoxedProcessPtr(), int iProcessCount = 0);
+	bool					UpdateMenu();
+	void					UpdateMoveMenu();
+	void					RenameGroup(const QString OldName, const QString NewName);
+	void					RenameItem(const QString OldName, const QString NewName);
+
+	void					SetCustomOrder();
+	bool					MoveItem(const QString& Name, const QString& To, int pos = -1);
 
 	QString					FindParent(const QString& Name);
 	bool					IsParentOf(const QString& Name, const QString& Group);
 
 	void					ChangeExpand(const QModelIndex& index, bool bExpand);
+
+	QMenu*					GetMenuFolder(const QString& Folder, QMenu* pParent);
 
 	QVBoxLayout*			m_pMainLayout;
 
@@ -89,17 +108,21 @@ private:
 	CSbieModel*				m_pSbieModel;
 	QSortFilterProxyModel*	m_pSortProxy;
 
-	QMenu*					m_pMenu2;
+	QMenu*					m_pMenuBox;
+	QMenu*					m_pMenuProcess;
+	QMenu*					m_pMenuGroup;
+	QMenu*					m_pMenuTray;
 
 	QAction*				m_pNewBox;
 	QAction*				m_pAddGroupe;
 	QAction*				m_pRenGroupe;
 	QAction*				m_pDelGroupe;
 	QAction*				m_pStopAsync;
-	int						m_iMenuTop;
 	QMenu*					m_pMenuRun;
 	QAction*				m_pMenuRunAny;
 	QAction*				m_pMenuRunMenu;
+	QMenu*					m_pMenuRunStart;
+	QMap<QString, QMenu*>	m_MenuFolders;
 	QAction*				m_pMenuRunBrowser;
 	QAction*				m_pMenuRunMailer;
 	QMenu*					m_pMenuRunTools;
@@ -118,24 +141,25 @@ private:
 	QAction*				m_pMenuPresetsFakeAdmin;
 	QAction*				m_pMenuPresetsINet;
 	QAction*				m_pMenuPresetsShares;
+	QAction*				m_pMenuPresetsRecovery;
 	QAction*				m_pMenuOptions;
 	QAction*				m_pMenuSnapshots;
 	QAction*				m_pMenuEmptyBox;
 	QMenu*					m_pMenuContent;
 	QAction*				m_pMenuExplore;
 	QAction*				m_pMenuBrowse;
+	QAction*				m_pMenuRefresh;
 	QAction*				m_pMenuRegEdit;
 	QAction*				m_pMenuRecover;
 	QAction*				m_pMenuCleanUp;
 	QAction*				m_pMenuRemove;
+	QMenu*					m_pMenuTools;
 	QAction*				m_pMenuDuplicate;
 	QAction*				m_pMenuMoveUp;
 	//QAction*				m_pMenuMoveBy;
 	QAction*				m_pMenuMoveDown;
 	QMenu*					m_pMenuMoveTo;
-	int						m_iMoveTo;
 	QAction*				m_pMenuRename;
-	int						m_iMenuBox;
 
 	QAction*				m_pMenuTerminate;
 	QAction*				m_pMenuLinkTo;
@@ -148,11 +172,13 @@ private:
 	QAction*				m_pMenuPinToRun;
 	//QAction*				m_pMenuSuspend;
 	//QAction*				m_pMenuResume;
-	int						m_iMenuProc;
 
 	QAction*				m_pRemove;
 
 	int						m_iMenuRun;
 
 	QFileIconProvider		m_IconProvider;
+
+	QList<CSandBoxPtr>		m_CurSandBoxes;
+	QList<CBoxedProcessPtr>	m_CurProcesses;
 };

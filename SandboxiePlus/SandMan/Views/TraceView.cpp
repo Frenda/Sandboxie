@@ -10,7 +10,7 @@
 //class CTraceFilterProxyModel : public CSortFilterProxyModel
 //{
 //public:
-//	CTraceFilterProxyModel(QObject* parrent = 0) : CSortFilterProxyModel(false, parrent)
+//	CTraceFilterProxyModel(QObject* parrent = 0) : CSortFilterProxyModel(parrent)
 //	{
 //		m_FilterPid = 0;
 //		m_FilterTid = 0;
@@ -51,6 +51,8 @@
 CTraceTree::CTraceTree(QWidget* parent) 
 	: CPanelWidget<QTreeViewEx>(parent) 
 {
+	m_pTreeList->setAlternatingRowColors(theConf->GetBool("Options/AltRowColors", false));
+
 	m_pTreeList->setSelectionMode(QAbstractItemView::ExtendedSelection);
 
 	m_pTraceModel = new CTraceModel();
@@ -66,12 +68,9 @@ CTraceTree::CTraceTree(QWidget* parent)
 
 	m_pTreeList->setModel(m_pTraceModel);
 
-
-	m_pTreeList->setSelectionMode(QAbstractItemView::ExtendedSelection);
-#ifdef WIN32
 	QStyle* pStyle = QStyleFactory::create("windows");
 	m_pTreeList->setStyle(pStyle);
-#endif
+	m_pTreeList->setItemDelegate(new CTreeItemDelegate());
 	m_pTreeList->setExpandsOnDoubleClick(false);
 	//m_pTreeList->setSortingEnabled(true);
 
@@ -104,12 +103,14 @@ CTraceTree::~CTraceTree()
 CMonitorList::CMonitorList(QWidget* parent) 
 	: CPanelWidget<QTreeViewEx>(parent) 
 {
+	m_pTreeList->setAlternatingRowColors(theConf->GetBool("Options/AltRowColors", false));
+
 	m_pTreeList->setSelectionMode(QAbstractItemView::ExtendedSelection);
 
 	m_pMonitorModel = new CMonitorModel();
 	//connect(m_pMonitorModel, SIGNAL(NewBranche()), this, SLOT(UpdateFilters()));
 
-	m_pSortProxy = new CSortFilterProxyModel(false, this);
+	m_pSortProxy = new CSortFilterProxyModel(this);
 	m_pSortProxy->setSortRole(Qt::EditRole);
 	m_pSortProxy->setSourceModel(m_pMonitorModel);
 	m_pSortProxy->setDynamicSortFilter(true);
@@ -118,11 +119,10 @@ CMonitorList::CMonitorList(QWidget* parent)
 	m_pSortProxy->setView(m_pTreeList);
 
 
-	m_pTreeList->setSelectionMode(QAbstractItemView::ExtendedSelection);
-#ifdef WIN32
 	QStyle* pStyle = QStyleFactory::create("windows");
 	m_pTreeList->setStyle(pStyle);
-#endif
+	m_pTreeList->setItemDelegate(new CTreeItemDelegate());
+	
 	m_pTreeList->setExpandsOnDoubleClick(false);
 	m_pTreeList->setSortingEnabled(true);
 
@@ -151,7 +151,7 @@ CMonitorList::~CMonitorList()
 ////////////////////////////////////////////////////////////////////////////////////////
 // CTraceView
 
-CTraceView::CTraceView(QWidget* parent) : QWidget(parent)
+CTraceView::CTraceView(bool bStandAlone, QWidget* parent) : QWidget(parent)
 {
 	//m_pTreeList->setItemDelegate(theGUI->GetItemDelegate());
 
@@ -168,7 +168,7 @@ CTraceView::CTraceView(QWidget* parent) : QWidget(parent)
 	m_FilterStatus = 0;
 
 	m_pMainLayout = new QVBoxLayout();
-	m_pMainLayout->setMargin(0);
+	m_pMainLayout->setContentsMargins(0,0,0,0);
 	this->setLayout(m_pMainLayout);
 
 	m_pTraceToolBar = new QToolBar();
@@ -220,9 +220,13 @@ CTraceView::CTraceView(QWidget* parent) : QWidget(parent)
 	connect(m_pTraceStatus, SIGNAL(currentIndexChanged(int)), this, SLOT(OnSetFilter()));
 	m_pTraceToolBar->addWidget(m_pTraceStatus);
 
-	m_pAllBoxes = m_pTraceToolBar->addAction(CSandMan::GetIcon("All"), tr("Show All Boxes"), this, SLOT(OnSetFilter()));
-	m_pAllBoxes->setCheckable(true);
-	m_pAllBoxes->setChecked(theConf->GetBool("Options/UseLogTree"));
+	if (bStandAlone)
+		m_pAllBoxes = NULL;
+	else {
+		m_pAllBoxes = m_pTraceToolBar->addAction(CSandMan::GetIcon("All"), tr("Show All Boxes"), this, SLOT(OnSetFilter()));
+		m_pAllBoxes->setCheckable(true);
+		m_pAllBoxes->setChecked(theConf->GetBool("Options/UseLogTree"));
+	}
 
 	m_pTraceToolBar->addSeparator();
 
@@ -233,15 +237,22 @@ CTraceView::CTraceView(QWidget* parent) : QWidget(parent)
 	m_pMainLayout->addWidget(m_pTraceToolBar);
 
 
-
 	m_pView = new QWidget(this);
 	m_pLayout = new QStackedLayout(m_pView);
 	
 	m_pTrace = new CTraceTree(this);
 	((CTraceModel*)m_pTrace->GetModel())->SetTree(m_pTraceTree->isChecked());
+
+	if (bStandAlone) {
+		QAction* pAction = new QAction(tr("Cleanup Trace Log"));
+		connect(pAction, SIGNAL(triggered()), this, SLOT(Clear()));
+		m_pTrace->GetMenu()->insertAction(m_pTrace->GetMenu()->actions()[0], pAction);
+		m_pTrace->GetMenu()->insertSeparator(m_pTrace->GetMenu()->actions()[0]);
+	}
+
 	m_pLayout->addWidget(m_pTrace);
 
-	QObject::connect(m_pTrace, SIGNAL(FilterSet(const QRegExp&, bool, int)), this, SLOT(SetFilter(const QRegExp&, bool, int)));
+	QObject::connect(m_pTrace, SIGNAL(FilterSet(const QRegularExpression&, bool, int)), this, SLOT(SetFilter(const QRegularExpression&, bool, int)));
 
 	m_pMonitor = new CMonitorList(this);
 	m_pLayout->addWidget(m_pMonitor);
@@ -249,14 +260,22 @@ CTraceView::CTraceView(QWidget* parent) : QWidget(parent)
 	m_pView->setLayout(m_pLayout);
 	m_pMainLayout->addWidget(m_pView);
 
-
 	OnSetMode();
-
+	
+	m_uTimerID = startTimer(1000);
 }
 
 CTraceView::~CTraceView()
 {
-	
+	killTimer(m_uTimerID);
+}
+
+void CTraceView::timerEvent(QTimerEvent* pEvent)
+{
+	if (pEvent->timerId() != m_uTimerID)
+		return;
+
+	Refresh();
 }
 
 int CTraceView__Filter(const CTraceEntryPtr& pEntry, void* params)
@@ -306,7 +325,7 @@ int CTraceView__Filter(const CTraceEntryPtr& pEntry, void* params)
 void CTraceView::Refresh()
 {
 	QList<CSandBoxPtr>Boxes;
-	if(!m_pAllBoxes->isChecked())
+	if(m_pAllBoxes && !m_pAllBoxes->isChecked())
 		Boxes = theGUI->GetBoxView()->GetSelectedBoxes();
 	
 	if (m_pCurrentBox != (Boxes.count() == 1 ? Boxes.first().data() : NULL)) {
@@ -442,7 +461,11 @@ void CTraceView::AddAction(QAction* pAction)
 void CTraceView::OnSetTree()
 {
 	((CTraceModel*)m_pTrace->GetModel())->SetTree(m_pTraceTree->isChecked());
+	
 	m_pTrace->m_pTraceModel->Clear();
+	Refresh();
+	m_pTrace->GetTree()->expandAll();
+
 	theConf->SetValue("Options/UseLogTree", m_pTraceTree->isChecked());
 }
 
@@ -468,7 +491,7 @@ void CTraceView::UpdateFilters()
 	quint32 cur_pid = m_pTracePid->currentData().toUInt();
 
 	QMap<quint32, SProgInfo> pids = m_PidMap;
-	foreach(quint32 pid, pids.uniqueKeys()) {
+	foreach(quint32 pid, pids.keys()) {
 		SProgInfo& Info = pids[pid];
 
 		if(m_pTracePid->findData(pid) == -1)
@@ -484,7 +507,7 @@ void CTraceView::UpdateFilters()
 	}
 }
 
-void CTraceView::SetFilter(const QRegExp& Exp, bool bHighLight, int Col)
+void CTraceView::SetFilter(const QRegularExpression& Exp, bool bHighLight, int Col)
 {
 	m_FilterExp = Exp;
 	m_bHighLight = bHighLight;
@@ -588,4 +611,48 @@ void CTraceView::SaveToFile()
 	}
 
 	File.close();
+}
+
+
+////////////////////////////////////////////////////////////////////////////////////////
+// CTraceWindow
+
+CTraceWindow::CTraceWindow(QWidget *parent)
+	: QDialog(parent)
+{
+	Qt::WindowFlags flags = windowFlags();
+	flags |= Qt::CustomizeWindowHint;
+	//flags &= ~Qt::WindowContextHelpButtonHint;
+	//flags &= ~Qt::WindowSystemMenuHint;
+	//flags &= ~Qt::WindowMinMaxButtonsHint;
+	//flags |= Qt::WindowMinimizeButtonHint;
+	//flags &= ~Qt::WindowCloseButtonHint;
+	flags &= ~Qt::WindowContextHelpButtonHint;
+	//flags &= ~Qt::WindowSystemMenuHint;
+	setWindowFlags(flags);
+
+	this->setWindowTitle(tr("Sandboxie-Plus - Trace Monitor"));
+
+	bool bAlwaysOnTop = theConf->GetBool("Options/AlwaysOnTop", false);
+	this->setWindowFlag(Qt::WindowStaysOnTopHint, bAlwaysOnTop);
+
+	QGridLayout* pLayout = new QGridLayout();
+	pLayout->setContentsMargins(3,3,3,3);
+	pLayout->addWidget(new CTraceView(true, this), 0, 0);
+	this->setLayout(pLayout);
+
+	restoreGeometry(theConf->GetBlob("TraceWindow/Window_Geometry"));
+}
+
+CTraceWindow::~CTraceWindow()
+{
+	theConf->SetBlob("TraceWindow/Window_Geometry", saveGeometry());
+
+	if(!theAPI) theAPI->EnableMonitor(false);
+}
+
+void CTraceWindow::closeEvent(QCloseEvent *e)
+{
+	emit Closed();
+	this->deleteLater();
 }

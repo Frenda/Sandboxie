@@ -128,6 +128,7 @@
       <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
       <OptimizeReferences>false</OptimizeReferences>
       <EnableCOMDATFolding>false</EnableCOMDATFolding>
+      <AdditionalOptions>/ignore:4281 %(AdditionalOptions)</AdditionalOptions>
     </Link>
     <ResourceCompile>
       <PreprocessorDefinitions>BUILD_UTILITY_PASS2;MY_WIN64_FLAG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
@@ -168,12 +169,14 @@
       <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
       <OptimizeReferences>false</OptimizeReferences>
       <EnableCOMDATFolding>false</EnableCOMDATFolding>
+      <AdditionalOptions>/ignore:4281 %(AdditionalOptions)</AdditionalOptions>
     </Link>
     <ResourceCompile>
       <PreprocessorDefinitions>BUILD_UTILITY_PASS2;MY_WIN64_FLAG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\common\dllimport.c" />
     <ClCompile Include="..\..\common\map.c">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='SbieRelease|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='SbieDebug|Win32'">true</ExcludedFromBuild>
@@ -218,10 +221,6 @@
     <ClCompile Include="..\..\common\stream.c">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='SbieRelease|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='SbieDebug|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='SbieRelease|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='SbieDebug|x64'">true</ExcludedFromBuild>
-    </ClCompile>
-    <ClCompile Include="..\..\common\wow64ext\wow64ext.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='SbieRelease|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='SbieDebug|x64'">true</ExcludedFromBuild>
     </ClCompile>
@@ -433,6 +432,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\apps\com\common.h" />
+    <ClInclude Include="..\..\common\dllimport.h" />
     <ClInclude Include="..\..\common\map.h" />
     <ClInclude Include="..\..\common\my_version.h" />
     <ClInclude Include="..\..\common\ntproto.h" />
@@ -445,9 +445,6 @@
     <ClInclude Include="..\..\common\rbtree.h" />
     <ClInclude Include="..\..\common\stream.h" />
     <ClInclude Include="..\..\common\win32_ntddk.h" />
-    <ClInclude Include="..\..\common\wow64ext\CMemPtr.h" />
-    <ClInclude Include="..\..\common\wow64ext\internal.h" />
-    <ClInclude Include="..\..\common\wow64ext\wow64ext.h" />
     <ClInclude Include="advapi.h" />
     <ClInclude Include="debug.h" />
     <ClInclude Include="dll.h" />
@@ -474,15 +471,6 @@
     <Midl Include="pstore.idl" />
   </ItemGroup>
   <ItemGroup>
-    <CustomBuild Include="..\..\common\NtCRT\x86\except_handler3.asm">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='SbieRelease|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='SbieDebug|x64'">true</ExcludedFromBuild>
-      <FileType>Document</FileType>
-      <Command Condition="'$(Configuration)|$(Platform)'=='SbieRelease|Win32'">ml -c  -Cx -nologo -Zi -Zm -Fo$(Configuration)\%(Filename).obj %(FullPath)</Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='SbieRelease|Win32'">%(ProjectDir)$(Configuration)\%(Filename).obj</Outputs>
-      <Command Condition="'$(Configuration)|$(Platform)'=='SbieDebug|Win32'">ml -c  -Cx -nologo -Zi -Zm -Fo$(Configuration)\%(Filename).obj %(FullPath)</Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='SbieDebug|Win32'">%(ProjectDir)$(Configuration)\%(Filename).obj</Outputs>
-    </CustomBuild>
     <CustomBuild Include="..\..\common\NtCRT\x64\ntdll.def">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='SbieRelease|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='SbieDebug|Win32'">true</ExcludedFromBuild>
@@ -513,6 +501,24 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='SbieDebug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='SbieRelease|x64'">true</ExcludedFromBuild>
     </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Object Include="..\..\common\NtCRT\x86\ntdll\eh3valid_user.obj">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='SbieRelease|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='SbieDebug|x64'">true</ExcludedFromBuild>
+    </Object>
+    <Object Include="..\..\common\NtCRT\x86\ntdll\exsup.obj">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='SbieRelease|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='SbieDebug|x64'">true</ExcludedFromBuild>
+    </Object>
+    <Object Include="..\..\common\NtCRT\x86\ntdll\exsup2.obj">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='SbieRelease|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='SbieDebug|x64'">true</ExcludedFromBuild>
+    </Object>
+    <Object Include="..\..\common\NtCRT\x86\ntdll\exsup3.obj">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='SbieRelease|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='SbieDebug|x64'">true</ExcludedFromBuild>
+    </Object>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

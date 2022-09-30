@@ -21,15 +21,15 @@ bool IsElevated()
     return fRet;
 }
 
-int RunElevated(const wstring& Params, bool bGetCode)
+int RunElevated(const std::wstring& Params, bool bGetCode)
 {
 	wchar_t szPath[MAX_PATH];
 	if (!GetModuleFileName(NULL, szPath, ARRAYSIZE(szPath)))
 		return -3;
-	return RunElevated(wstring(szPath), Params, bGetCode);
+	return RunElevated(std::wstring(szPath), Params, bGetCode);
 }
 
-int RunElevated(const wstring& binaryPath, const wstring& Params, bool bGetCode)
+int RunElevated(const std::wstring& binaryPath, const std::wstring& Params, bool bGetCode)
 {
 	// Launch itself as admin
 	SHELLEXECUTEINFO sei = { sizeof(sei) };
@@ -62,14 +62,44 @@ int RunElevated(const wstring& binaryPath, const wstring& Params, bool bGetCode)
 
 int RestartElevated(int &argc, char **argv)
 {
-	wstring Params;
+	std::wstring Params;
 	for (int i = 1; i < argc; i++)
 	{
 		if (i > 1)
 			Params.append(L" ");
-		Params.append(L"\"" + wstring_convert<codecvt_utf8<wchar_t>>().from_bytes(argv[i]) + L"\"");
+		Params.append(L"\"" + std::wstring_convert<std::codecvt_utf8<wchar_t>>().from_bytes(argv[i]) + L"\"");
 	}
 	return RunElevated(Params);
+}
+
+bool IsAdminUser(bool OnlyFull)
+{
+	HANDLE hToken;
+	if (!OpenProcessToken(GetCurrentProcess(), MAXIMUM_ALLOWED, &hToken))
+		return false;
+
+    SID_IDENTIFIER_AUTHORITY NtAuthority = SECURITY_NT_AUTHORITY;
+    PSID AdministratorsGroup;
+    BOOL bRet = AllocateAndInitializeSid(&NtAuthority, 2, SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_ADMINS, 0, 0, 0, 0, 0, 0, &AdministratorsGroup);
+	if (bRet) {
+		if (!CheckTokenMembership(NULL, AdministratorsGroup, &bRet))
+			bRet = FALSE;
+		FreeSid(AdministratorsGroup);
+		if (!bRet || OnlyFull) {
+			OSVERSIONINFO osvi;
+			osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
+			if (GetVersionEx(&osvi) && osvi.dwMajorVersion >= 6) {
+				ULONG elevationType, len;
+				bRet = GetTokenInformation(hToken, (TOKEN_INFORMATION_CLASS)TokenElevationType, &elevationType, sizeof(elevationType), &len);
+				if (bRet && (elevationType != TokenElevationTypeFull && (OnlyFull || elevationType != TokenElevationTypeLimited)))
+					bRet = FALSE;
+			}
+		}
+	}
+
+	CloseHandle(hToken);
+
+    return !!bRet;
 }
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -112,7 +142,7 @@ bool AutorunEnable (bool is_enable)
 			wchar_t szPath[MAX_PATH];
 			if (GetModuleFileName(NULL, szPath, ARRAYSIZE(szPath)))
 			{
-				wstring path = L"\"" + wstring(szPath) + L"\" -autorun";
+				std::wstring path = L"\"" + std::wstring(szPath) + L"\" -autorun";
 
 				result = (RegSetValueEx(hkey, AUTO_RUN_KEY_NAME, 0, REG_SZ, (LPBYTE)path.c_str(), DWORD((path.length() + 1) * sizeof(WCHAR))) == ERROR_SUCCESS);
 			}

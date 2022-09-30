@@ -16,6 +16,10 @@ public:
 
 	QList<QVariant>	Sync(const QMap<QString, CSandBoxPtr>& BoxList, const QMap<QString, QStringList>& Groups = QMap<QString, QStringList>(), bool ShowHidden = false);
 
+	void			SetTree(bool bTree)				{ m_bTree = bTree; }
+	bool			IsTree() const					{ return m_bTree; }
+	void			SetLargeIcons(bool bSet = true) { m_LargeIcons = bSet; }
+
 	CSandBoxPtr		GetSandBox(const QModelIndex &index) const;
 	CBoxedProcessPtr GetProcess(const QModelIndex &index) const;
 	QString			GetGroup(const QModelIndex &index) const;
@@ -30,7 +34,8 @@ public:
 	}				GetType(const QModelIndex &index) const;
 
 	Qt::DropActions supportedDropActions() const { return Qt::MoveAction; }
-	Qt::ItemFlags	flags(const QModelIndex& index) const;
+	QVariant data(const QModelIndex &index, int role) const;
+	Qt::ItemFlags flags(const QModelIndex& index) const;
 	QStringList mimeTypes() { return QStringList() << m_SbieModelMimeType; }
 	QMimeData* mimeData(const QModelIndexList& indexes) const;
 	bool canDropMimeData(const QMimeData* data, Qt::DropAction action, int row, int column, const QModelIndex& parent) const { return true; }
@@ -54,21 +59,24 @@ public:
 	};
 
 signals:
-	void			MoveBox(const QString& Name, const QString& To);
-	void			MoveGroup(const QString& Name, const QString& To);
+	void			MoveBox(const QString& Name, const QString& To, int row);
+	void			MoveGroup(const QString& Name, const QString& To, int row);
 
 protected:
 	bool			Sync(const CSandBoxPtr& pBox, const QList<QVariant>& Path, const QMap<quint32, CBoxedProcessPtr>& ProcessList, QMap<QList<QVariant>, QList<STreeNode*> >& New, QHash<QVariant, STreeNode*>& Old, QList<QVariant>& Added);
 
 	struct SSandBoxNode: STreeNode
 	{
-		SSandBoxNode(const QVariant& Id) : STreeNode(Id) { inUse = false; boxType = -1; OrderNumber = 0; }
+		SSandBoxNode(const QVariant& Id) : STreeNode(Id) { inUse = false; bOpen = false; busyState = 0; boxType = -1; boxColor = 0; OrderNumber = 0; }
 
 		CSandBoxPtr	pBox;
 		bool		inUse;
+		bool		bOpen;
 		int			busyState;
 		int			boxType;
+		int			boxColor;
 		int			OrderNumber;
+		QString		Action;
 
 		CBoxedProcessPtr pProcess;
 	};
@@ -89,6 +97,8 @@ protected:
 
 private:
 
+	bool								m_bTree;
+	bool m_LargeIcons;
 	//QIcon m_BoxEmpty;
 	//QIcon m_BoxInUse;
 	QIcon m_ExeIcon;

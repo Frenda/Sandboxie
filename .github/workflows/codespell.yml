@@ -1,6 +1,6 @@
 # This is a basic workflow to help you get started with Actions
 
-name: Codespell
+name: Spell check
 
 # Controls when the workflow will run
 on:
@@ -11,8 +11,8 @@ on:
   # Triggers the workflow on push or pull request events but only for the master branch
   #push:
   #  branches: [ master ]
-  pull_request:
-    branches: [ master ]
+  #pull_request:
+  #  branches: [ master ]
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -32,6 +32,6 @@ jobs:
         uses: codespell-project/actions-codespell@master
         with:
           check_filenames: false
-          skip: ./.git,./SandboxiePlus/MiscHelpers/*,./Sandboxie/msgs/Text-*-*.txt,./SandboxiePlus/SandMan/*.ts,./Installer/Languages.iss
+          skip: ./.git,./Sandboxie/msgs/Text-*-*.txt,./Sandboxie/msgs/report/Report-*.txt,./SandboxiePlus/SandMan/*.ts,./Installer/Languages.iss
           builtin: clear,rare,code
-          ignore_words_list: pevent,doubleclick,parm,parms,etcp,ois,ba,ptd,modell,namesd,stdio,uint,errorstring
+          ignore_words_list: pevent,doubleclick,parm,parms,etcp,ois,ba,ptd,modell,namesd,stdio,uint,errorstring,ontext,atend,deque,ecounter,nmake,namess

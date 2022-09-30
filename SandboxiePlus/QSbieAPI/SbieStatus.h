@@ -46,6 +46,7 @@ enum ESbieMsgCodes
 	SB_NameExists,
 	SB_PasswordBad,
 	SB_Canceled,
+	SB_LastError
 };
 
 class CSbieStatus
@@ -100,7 +101,7 @@ protected:
 		QVariantList Args;
 		long Status;
 
-		mutable atomic<int> aRefCnt;
+		mutable std::atomic<int> aRefCnt;
 	} *m;
 
 	void Attach(const CSbieStatus* p)

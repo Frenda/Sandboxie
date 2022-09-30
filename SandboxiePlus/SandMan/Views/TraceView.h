@@ -19,13 +19,13 @@ public:
 	CTraceModel*		m_pTraceModel;
 
 public slots:
-	void				SetFilter(const QRegExp& Exp, bool bHighLight = false, int Column = -1) {
+	void				SetFilter(const QRegularExpression& Exp, bool bHighLight = false, int Column = -1) {
 		emit FilterSet(Exp, bHighLight, Column);
 	}
 	void				SelectNext() {}
 
 signals:
-	void				FilterSet(const QRegExp& Exp, bool bHighLight = false, int Column = -1);
+	void				FilterSet(const QRegularExpression& Exp, bool bHighLight = false, int Column = -1);
 };
 
 class CMonitorList : public CPanelWidget<QTreeViewEx>
@@ -44,15 +44,15 @@ class CTraceView : public QWidget
 {
 	Q_OBJECT
 public:
-	CTraceView(QWidget* parent = 0);
+	CTraceView(bool bStandAlone, QWidget* parent = 0);
 	~CTraceView();
-
-	void				Refresh();
-	void				Clear();
 
 	void				AddAction(QAction* pAction);
 
 public slots:
+	void				Refresh();
+	void				Clear();
+
 	void				OnSetTree();
 	void				OnSetMode();
 	void				OnSetPidFilter();
@@ -61,11 +61,14 @@ public slots:
 
 private slots:
 	void				UpdateFilters();
-	void				SetFilter(const QRegExp& Exp, bool bHighLight = false, int Col = -1); // -1 = any
+	void				SetFilter(const QRegularExpression& Exp, bool bHighLight = false, int Col = -1); // -1 = any
 
 	void				SaveToFile();
 
 protected:
+	void				timerEvent(QTimerEvent* pEvent);
+	int					m_uTimerID;
+
 	struct SProgInfo
 	{
 		QString Name;
@@ -83,7 +86,7 @@ protected:
 
 	bool				m_FullRefresh;
 
-	QRegExp				m_FilterExp;
+	QRegularExpression	m_FilterExp;
 	bool				m_bHighLight;
 	//int					m_FilterCol;
 	quint32				m_FilterPid;
@@ -109,4 +112,23 @@ protected:
 
 	QWidget*			m_pView;
 	QStackedLayout*		m_pLayout;
+};
+
+
+////////////////////////////////////////////////////////////////////////////////////////
+// CTraceWindow
+
+class CTraceWindow : public QDialog
+{
+	Q_OBJECT
+
+public:
+	CTraceWindow(QWidget *parent = Q_NULLPTR);
+	~CTraceWindow();
+
+signals:
+	void		Closed();
+
+protected:
+	void		closeEvent(QCloseEvent *e);
 };

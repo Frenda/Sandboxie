@@ -520,7 +520,7 @@ void Key_DeleteValueFromCLSID(
     const WCHAR *Xxxid, const WCHAR *Guid, const WCHAR *ValueName);
 
 void Key_CreateBaseKeys();
-//void Key_CreateBaseFolders();
+void Key_CreateBaseFolders();
 
 //---------------------------------------------------------------------------
 // Functions (sxs)
@@ -569,7 +569,7 @@ void Gui_AllowSetForegroundWindow(void);
 
 void Gdi_SplWow64(BOOLEAN Register);
 
-BOOLEAN Gdi_InitZero(void);
+BOOLEAN Gdi_InitZero(HMODULE module);
 
 void Gui_ResetClipCursor(void);
 
@@ -802,7 +802,7 @@ BOOLEAN Config_MatchImage(
 
 WCHAR* Config_MatchImageAndGetValue(WCHAR* value, const WCHAR* ImageName, ULONG* pMode);
 
-BOOLEAN Config_InitPatternList(const WCHAR* boxname, const WCHAR* setting, LIST* list);
+BOOLEAN Config_InitPatternList(const WCHAR* boxname, const WCHAR* setting, LIST* list, BOOLEAN dos);
 
 VOID Config_FreePatternList(LIST* list);
 

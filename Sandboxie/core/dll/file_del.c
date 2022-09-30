@@ -331,6 +331,8 @@ _FX ULONG File_GetPathFlags(const WCHAR* Path, WCHAR** pRelocation)
 
 _FX VOID File_SavePathNode_internal(HANDLE hPathsFile, LIST* parent, WCHAR* Path, ULONG Length, ULONG SetFlags) 
 {
+    IO_STATUS_BLOCK IoStatusBlock;
+
     const WCHAR CrLf[] = L"\r\n";
     WCHAR FlagStr[16] = L"|";
 
@@ -356,20 +358,20 @@ _FX VOID File_SavePathNode_internal(HANDLE hPathsFile, LIST* parent, WCHAR* Path
         if ((child->flags & ~SetFlags) != 0 || child->relocation != NULL) { 
 
             // write the path
-            WriteFile(hPathsFile, Path, Path_Len * sizeof(WCHAR), NULL, NULL);
+            NtWriteFile(hPathsFile, NULL, NULL, NULL, &IoStatusBlock, Path, Path_Len * sizeof(WCHAR), NULL, NULL);
 
             // write the flags
             _ultow(child->flags, FlagStr + 1, 16);
-            WriteFile(hPathsFile, FlagStr, wcslen(FlagStr) * sizeof(WCHAR), NULL, NULL);
+            NtWriteFile(hPathsFile, NULL, NULL, NULL, &IoStatusBlock, FlagStr, wcslen(FlagStr) * sizeof(WCHAR), NULL, NULL);
 
             // write the relocation
             if (child->relocation != NULL) {
-                WriteFile(hPathsFile, FlagStr, sizeof(WCHAR), NULL, NULL); // write |
-                WriteFile(hPathsFile, child->relocation, wcslen(child->relocation) * sizeof(WCHAR), NULL, NULL);
+                NtWriteFile(hPathsFile, NULL, NULL, NULL, &IoStatusBlock, FlagStr, sizeof(WCHAR), NULL, NULL); // write |
+                NtWriteFile(hPathsFile, NULL, NULL, NULL, &IoStatusBlock, child->relocation, wcslen(child->relocation) * sizeof(WCHAR), NULL, NULL);
             }
 
             // write line ending
-            WriteFile(hPathsFile, CrLf, sizeof(CrLf) - sizeof(WCHAR), NULL, NULL);
+            NtWriteFile(hPathsFile, NULL, NULL, NULL, &IoStatusBlock, (void*)CrLf, sizeof(CrLf) - sizeof(WCHAR), NULL, NULL);
         }
 
         File_SavePathNode_internal(hPathsFile, &child->items, Path, Path_Len, SetFlags | child->flags);
@@ -472,8 +474,12 @@ _FX BOOLEAN File_LoadPathTree_internal(LIST* Root, const WCHAR* name)
 
     HANDLE hPathsFile;
     hPathsFile = CreateFile(PathsFile, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (hPathsFile == INVALID_HANDLE_VALUE)
+    if (hPathsFile == INVALID_HANDLE_VALUE) {
+        hPathsFile = CreateFile(PathsFile, FILE_APPEND_DATA, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (hPathsFile != INVALID_HANDLE_VALUE)
+            CloseHandle(hPathsFile);
         return FALSE;
+    }
 
     File_ClearPathBranche_internal(Root);
 
@@ -562,9 +568,9 @@ _FX VOID File_RefreshPathTree()
         //
 
         File_LoadPathTree();
-    }
 
-    FindNextChangeNotification(File_BoxRootWatcher); // rearm the watcher
+        FindNextChangeNotification(File_BoxRootWatcher); // rearm the watcher
+    }
 }
 
 
@@ -591,6 +597,8 @@ _FX BOOLEAN File_InitDelete_v2()
     SbieDll_TranslateNtToDosPath(BoxFilePath);
 
     File_BoxRootWatcher = FindFirstChangeNotification(BoxFilePath, FALSE, FILE_NOTIFY_CHANGE_SIZE | FILE_NOTIFY_CHANGE_LAST_WRITE);
+
+    FindNextChangeNotification(File_BoxRootWatcher); // arm the watcher
 
     return TRUE;
 }

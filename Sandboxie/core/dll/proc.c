@@ -324,11 +324,14 @@ BOOL            Dll_ElectronWorkaround = FALSE;
 
 _FX BOOLEAN Proc_Init(void)
 {
+    HMODULE module = NULL;
+
     P_CreateProcessInternal CreateProcessInternalW;
     ANSI_STRING ansi;
     NTSTATUS status;
 
-    Dll_ElectronWorkaround = SbieApi_QueryConfBool(NULL, L"UseElectronWorkaround", TRUE);
+    if(!Dll_CompartmentMode)
+        Dll_ElectronWorkaround = Config_GetSettingsForImageName_bool(L"UseElectronWorkaround", FALSE);
 
     //
     // abort if we should not hook any process creation functions

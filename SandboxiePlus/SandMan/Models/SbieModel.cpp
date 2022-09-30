@@ -1,12 +1,14 @@
 #include "stdafx.h"
 #include "SbieModel.h"
 #include "../../MiscHelpers/Common/Common.h"
-#include "../../MiscHelpers/Common/IconExtreactor.h"
 #include "../SandMan.h"
 
 CSbieModel::CSbieModel(QObject *parent)
-:CTreeItemModel(parent)
+: CTreeItemModel(parent)
 {
+	m_bTree = true;
+	m_LargeIcons = false;
+
 	//m_BoxEmpty = QIcon(":/BoxEmpty");
 	//m_BoxInUse = QIcon(":/BoxInUse");
 	m_ExeIcon = QIcon(":/exeIcon32");
@@ -113,7 +115,12 @@ QList<QVariant> CSbieModel::Sync(const QMap<QString, CSandBoxPtr>& BoxList, cons
 	QMap<QList<QVariant>, QList<STreeNode*> > New;
 	QHash<QVariant, STreeNode*> Old = m_Map;
 
+	bool bGroupsFirst = theConf->GetBool("Options/SortGroupsFirst", false);
 	bool bWatchSize = theConf->GetBool("Options/WatchBoxSize", false);
+	bool ColorIcons = theConf->GetBool("Options/ColorBoxIcons", false);
+	bool bPlus = (theAPI->GetFeatureFlags() & CSbieAPI::eSbieFeatureCert) != 0;
+	if (theConf->GetInt("Options/ViewMode", 1) == 2)
+		bPlus = false;
 
 	foreach(const QString& Group, Groups.keys())
 	{
@@ -135,10 +142,15 @@ QList<QVariant> CSbieModel::Sync(const QMap<QString, CSandBoxPtr>& BoxList, cons
 			New[pNode->Path].append(pNode);
 			Added.append(ID);
 
-			pNode->Icon = theGUI->GetBoxIcon(CSandBoxPlus::eDefault, false);
+			QIcon Icon = QIcon(bPlus ? ":/Boxes/Group2" : ":/Boxes/Group"); // theGUI->GetBoxIcon(CSandBoxPlus::eDefault, false);
+			if (m_LargeIcons) // but not for boxes
+				Icon = QIcon(Icon.pixmap(QSize(32,32)).scaled(16, 16, Qt::IgnoreAspectRatio, Qt::SmoothTransformation));
+			pNode->Icon = Icon;
 			pNode->IsBold = true;
 
 			pNode->Values[eName].Raw = Group;
+			if(bGroupsFirst) 
+				pNode->Values[eName].SortKey = ID;
 			pNode->Values[eStatus].Raw = tr("Box Group");
 		}
 		else
@@ -203,19 +215,43 @@ QList<QVariant> CSbieModel::Sync(const QMap<QString, CSandBoxPtr>& BoxList, cons
 		QMap<quint32, CBoxedProcessPtr> ProcessList = pBox->GetProcessList();
 
 		bool inUse = Sync(pBox, pNode->Path, ProcessList, New, Old, Added);
+		bool bOpen = pBoxEx->IsOpen();
 		bool Busy = pBoxEx->IsBusy();
 		int boxType = pBoxEx->GetType();
+		int boxColor = pBoxEx->GetColor();
 		
-		if (pNode->inUse != inUse || (pNode->busyState || Busy) || pNode->boxType != boxType)
+		QIcon Icon;
+		QString Action = pBox->GetText("DblClickAction");
+		if (!Action.isEmpty() && Action.left(1) != "!")
+		{
+			if (pNode->Action != Action || (pNode->busyState || Busy)) {
+				Icon = m_IconProvider.icon(QFileInfo(pBoxEx->GetCommandFile(Action)));
+				pNode->Action = Action;
+			}
+		}
+		else if (pNode->inUse != inUse || pNode->bOpen != bOpen || (pNode->busyState || Busy) || pNode->boxType != boxType || pNode->boxColor != boxColor)
 		{
 			pNode->inUse = inUse;
+			pNode->bOpen = bOpen;
 			pNode->boxType = boxType;
-			if(Busy) pNode->busyState = (pNode->busyState == 1) ? 2 : 1; // make it flach, the cheep way
-			else	 pNode->busyState = 0;
+			pNode->boxColor = boxColor;
 			//pNode->Icon = pNode->inUse ? m_BoxInUse : m_BoxEmpty;
-			pNode->Icon = theGUI->GetBoxIcon(boxType, inUse, pNode->busyState == 1);
+			if(ColorIcons)
+				Icon = theGUI->GetColorIcon(boxColor, inUse);
+			else
+				Icon = theGUI->GetBoxIcon(boxType, inUse);
+			pNode->Action.clear();
+		}
+
+		if (!Icon.isNull()) {
+			if (Busy)	Icon = theGUI->MakeIconBusy(Icon, pNode->busyState++);
+			else		pNode->busyState = 0;
+			if (m_LargeIcons) // but not for boxes
+				Icon = QIcon(Icon.pixmap(QSize(32,32)).scaled(16, 16, Qt::IgnoreAspectRatio, Qt::SmoothTransformation));
+			pNode->Icon = Icon;
 			Changed = 1; // set change for first column
 		}
+
 
 		if (pNode->IsGray != !pBoxEx->IsEnabled())
 		{
@@ -233,7 +269,7 @@ QList<QVariant> CSbieModel::Sync(const QMap<QString, CSandBoxPtr>& BoxList, cons
 			{
 				case eName:				Value = pBox->GetName(); break;
 				case eStatus:			Value = pBox.objectCast<CSandBoxPlus>()->GetStatusStr(); break;
-				case eInfo:				Value = bWatchSize ? pBox.objectCast<CSandBoxPlus>()->GetSize() : 0; break;
+				case eInfo:				Value = pBox.objectCast<CSandBoxPlus>()->IsEmptyCached() ? -2 : (bWatchSize ? pBox.objectCast<CSandBoxPlus>()->GetSize() : 0); break;
 				case ePath:				Value = pBox->GetFileRoot(); break;
 			}
 
@@ -248,7 +284,7 @@ QList<QVariant> CSbieModel::Sync(const QMap<QString, CSandBoxPtr>& BoxList, cons
 				switch (section)
 				{
 				case eName:				ColValue.Formatted = Value.toString().replace("_", " "); break;
-				case eInfo:				ColValue.Formatted = Value.toULongLong() > 0 ? FormatSize(Value.toULongLong()) : ""; break;
+				case eInfo:				ColValue.Formatted = Value.toULongLong() == -2 ? tr("Empty") : (Value.toULongLong() > 0 ? FormatSize(Value.toULongLong()) : ""); break;
 				}
 			}
 
@@ -491,6 +527,14 @@ QVariant CSbieModel::headerData(int section, Qt::Orientation orientation, int ro
 	return g_ExeIcon;
 }*/
 
+QVariant CSbieModel::data(const QModelIndex &index, int role) const
+{
+	//if(m_LargeIcons && role == Qt::SizeHintRole)
+	//    return QSize(32,32);
+
+	return CTreeItemModel::data(index, role);
+}
+
 Qt::ItemFlags CSbieModel::flags(const QModelIndex& index) const 
 {
 	Qt::ItemFlags Flags = CTreeItemModel::flags(index);
@@ -530,9 +574,9 @@ bool CSbieModel::dropMimeData(const QMimeData* data, Qt::DropAction action, int 
 
 	foreach(const QString & Name, Boxes) {
 		if(CSbieModel__HasGroupMark(Name))
-			MoveGroup(CSbieModel__RemoveGroupMark(Name), To);
+			MoveGroup(CSbieModel__RemoveGroupMark(Name), To, row);
 		else
-			MoveBox(Name, To);
+			MoveBox(Name, To, row);
 	}
 
 	return true;

@@ -12,7 +12,6 @@ HEADERS += ./MiscHelpers.h \
     ./Common/FlexError.h \
     ./Common/FlowLayout.h \
     ./Common/HistoryGraph.h \
-    ./Common/IconExtreactor.h \
     ./Common/qRC4.h \
     ./Common/Xml.h \
     ./Common/CheckableMessageBox.h \
@@ -34,6 +33,7 @@ HEADERS += ./MiscHelpers.h \
     ./Common/TreeViewEx.h \
     ./Common/TreeWidgetEx.h \
     ./Common/CheckList.h \
+    ./Common/NeonEffect.h \
     ./Common/NetworkAccessManager.h
     
 SOURCES += ./MiscHelpers.cpp \
@@ -45,7 +45,6 @@ SOURCES += ./MiscHelpers.cpp \
     ./Common/DebugHelpers.cpp \
     ./Common/Finder.cpp \
     ./Common/FlowLayout.cpp \
-    ./Common/IconExtreactor.cpp \
     ./Common/ItemChooser.cpp \
     ./Common/KeyValueInputDialog.cpp \
     ./Common/ListItemModel.cpp \

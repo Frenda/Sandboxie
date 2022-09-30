@@ -46,6 +46,8 @@ protected slots:
 	virtual void				RecursiveCopyPanel(const QModelIndex& ModelIndex, QList<QStringList>& Rows, int Level = 0);
 
 protected:
+	void						UpdateCopyMenu();
+	void						AddCopyMenu(QMenu* pMenu, bool bAddSeparator = true);
 	void						FormatAndCopy(QList<QStringList> Rows, bool Headder = true);
 
 	QMenu*						m_pMenu;
@@ -69,7 +71,7 @@ public:
 	CPanelWidget(QWidget *parent = 0) : CPanelView(parent)
 	{
 		m_pMainLayout = new QVBoxLayout();
-		m_pMainLayout->setMargin(0);
+		m_pMainLayout->setContentsMargins(0,0,0,0);
 		this->setLayout(m_pMainLayout);
 
 		m_pTreeList = new T();
@@ -111,14 +113,14 @@ public:
 	{
 		m_pFinder = new CFinder(NULL, this, false);
 		m_pMainLayout->addWidget(m_pFinder);
-		QObject::connect(m_pFinder, SIGNAL(SetFilter(const QRegExp&, bool, int)), this, SLOT(SetFilter(const QRegExp&, bool, int)));
+		QObject::connect(m_pFinder, SIGNAL(SetFilter(const QRegularExpression&, bool, int)), this, SLOT(SetFilter(const QRegularExpression&, bool, int)));
 	}
 
-	static void ApplyFilter(QTreeWidgetEx* pTree, QTreeWidgetItem* pItem, const QRegExp& Exp/*, bool bHighLight = false, int Col = -1*/)
+	static void ApplyFilter(QTreeWidgetEx* pTree, QTreeWidgetItem* pItem, const QRegularExpression& Exp/*, bool bHighLight = false, int Col = -1*/)
 	{
 		for (int j = 0; j < pTree->columnCount(); j++) {
-			pItem->setForeground(j, (m_DarkMode && !Exp.isEmpty() && pItem->text(j).contains(Exp)) ? Qt::yellow : pTree->palette().color(QPalette::WindowText));
-			pItem->setBackground(j, (!m_DarkMode && !Exp.isEmpty() && pItem->text(j).contains(Exp)) ? Qt::yellow : pTree->palette().color(QPalette::Base));
+			pItem->setForeground(j, (m_DarkMode && !Exp.isValid() && pItem->text(j).contains(Exp)) ? Qt::yellow : pTree->palette().color(QPalette::WindowText));
+			pItem->setBackground(j, (!m_DarkMode && !Exp.isValid() && pItem->text(j).contains(Exp)) ? Qt::yellow : pTree->palette().color(QPalette::Base));
 		}
 
 		for (int i = 0; i < pItem->childCount(); i++)
@@ -127,14 +129,14 @@ public:
 		}
 	}
 
-	static void ApplyFilter(QTreeWidgetEx* pTree, const QRegExp& Exp/*, bool bHighLight = false, int Col = -1*/)
+	static void ApplyFilter(QTreeWidgetEx* pTree, const QRegularExpression& Exp/*, bool bHighLight = false, int Col = -1*/)
 	{
 		for (int i = 0; i < pTree->topLevelItemCount(); i++)
 			ApplyFilter(pTree, pTree->topLevelItem(i), Exp/*, bHighLight, Col*/);
 	}
 
 private slots:
-	void SetFilter(const QRegExp& Exp, bool bHighLight = false, int Col = -1) // -1 = any
+	void SetFilter(const QRegularExpression& Exp, bool bHighLight = false, int Col = -1) // -1 = any
 	{
 		ApplyFilter(m_pTreeList, Exp);
 	}
@@ -154,7 +156,7 @@ public:
 	{
 		m_pModel = pModel;
 
-		m_pSortProxy = new CSortFilterProxyModel(false, this);
+		m_pSortProxy = new CSortFilterProxyModel(this);
 		m_pSortProxy->setSortRole(Qt::EditRole);
 		m_pSortProxy->setSourceModel(m_pModel);
 		m_pSortProxy->setDynamicSortFilter(true);

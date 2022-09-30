@@ -732,10 +732,15 @@ _FX PROCESS *Process_Create(
     // privacy mode requirers Rule Specificity
     //
 
+    proc->use_security_mode = Conf_Get_Boolean(proc->box->name, L"UseSecurityMode", 0, FALSE);
+    proc->is_locked_down = proc->use_security_mode || Conf_Get_Boolean(proc->box->name, L"SysCallLockDown", 0, FALSE);
 #ifdef USE_MATCH_PATH_EX
+    proc->restrict_devices = proc->use_security_mode || Conf_Get_Boolean(proc->box->name, L"RestrictDevices", 0, FALSE);
+
     proc->use_privacy_mode = Conf_Get_Boolean(proc->box->name, L"UsePrivacyMode", 0, FALSE); 
-    proc->use_rule_specificity = proc->use_privacy_mode || Conf_Get_Boolean(proc->box->name, L"UseRuleSpecificity", 0, FALSE); 
+    proc->use_rule_specificity = proc->restrict_devices || proc->use_privacy_mode || Conf_Get_Boolean(proc->box->name, L"UseRuleSpecificity", 0, FALSE); 
 #endif
+    proc->confidential_box = Conf_Get_Boolean(proc->box->name, L"ConfidentialBox", 0, FALSE); 
 
     //
     // check certificate
@@ -744,6 +749,13 @@ _FX PROCESS *Process_Create(
     if (!Driver_Certified && !proc->image_sbie) {
 
         const WCHAR* exclusive_setting = NULL;
+        if (proc->use_security_mode)
+            exclusive_setting = L"UseSecurityMode";
+        else if (proc->is_locked_down)
+            exclusive_setting = L"SysCallLockDown";
+        else if (proc->restrict_devices)
+            exclusive_setting = L"RestrictDevices";
+        else
 #ifdef USE_MATCH_PATH_EX
         if (proc->use_rule_specificity)
             exclusive_setting = L"UseRuleSpecificity";
@@ -753,6 +765,8 @@ _FX PROCESS *Process_Create(
 #endif
         if (proc->bAppCompartment)
             exclusive_setting = L"NoSecurityIsolation";
+        else if (proc->confidential_box)
+            exclusive_setting = L"ConfidentialBox";
 
         if (exclusive_setting) {
 

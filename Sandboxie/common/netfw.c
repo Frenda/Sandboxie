@@ -438,16 +438,17 @@ const WCHAR* wcsnchr(const WCHAR* str, size_t max, WCHAR ch)
 
 int _inet_pton(int af, const wchar_t* src, void* dst);
 
-int _inet_xton(const WCHAR* src, ULONG max, IP_ADDRESS *dst)
+int _inet_xton(const WCHAR* src, ULONG src_len, IP_ADDRESS *dst)
 {
-	WCHAR tmp[46]; // INET6_ADDRSTRLEN 
-	wmemcpy(tmp, src, max);
+	WCHAR tmp[46 + 1]; // INET6_ADDRSTRLEN 
+	if (src_len > ARRAYSIZE(tmp) - 1) src_len = ARRAYSIZE(tmp) - 1;
+	wmemcpy(tmp, src, src_len);
+	tmp[src_len] = L'\0';
 	
-    //dst->Type = AF_INET;
-    //if (wcschr(src, L':') != NULL)
-    //    dst->Type = AF_INET6;
+	USHORT af = wcschr(tmp, L':') != NULL ? AF_INET6 : AF_INET;
+	//dst->Type = af
+    int ret = _inet_pton(af, tmp, dst->Data);
 
-    int ret = _inet_pton(wcschr(src, L':') != NULL ? AF_INET6 : AF_INET, tmp, dst->Data);
     return ret;
 }
 
@@ -549,6 +550,7 @@ static int isxdigit_(int c) { return (isdigit_(c) || (c >= 'A' && c <= 'F') || (
 static int isascii(int iChar) { return((iChar <= 127) && (iChar >= 0)); }
 static int isalnum_(int c) { return (isdigit_(c) || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')); }
 
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // from BSD sources: http://code.google.com/p/plan9front/source/browse/sys/src/ape/lib/bsd/?r=320990f52487ae84e28961517a4fa0d02d473bac
 
@@ -649,7 +651,7 @@ static int delimchar(int c)
 {
 	if(c == '\0')
 		return 1;
-	if(c == ':' || isascii(c) && isalnum(c))
+	if(c == ':' || isascii(c) && isalnum_(c))
 		return 0;
 	return 1;
 }

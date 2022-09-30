@@ -29,6 +29,8 @@ static BOOLEAN Syscall_Init_List32(void);
 
 static BOOLEAN Syscall_Init_Table32(void);
 
+void Syscall_Update_Lockdown32();
+
 
 //---------------------------------------------------------------------------
 
@@ -161,6 +163,9 @@ _FX BOOLEAN Syscall_Init_List32(void)
     Syscall_LoadHookMap(L"EnableWin32Hook", &enabled_hooks);
     Syscall_LoadHookMap(L"DisableWin32Hook", &disabled_hooks);
 
+    LIST approved_syscalls;
+    Syscall_LoadHookMap(L"ApproveWin32SysCall", &approved_syscalls);
+
     BOOLEAN ignore_hook_blacklist = Conf_Get_Boolean(NULL, L"IgnoreWin32HookBlacklist", 0, FALSE);
 
     //
@@ -292,6 +297,9 @@ _FX BOOLEAN Syscall_Init_List32(void)
         }
         //DbgPrint("    Win32k Hook enabled for %s\n", name);
 
+#undef IS_PROC_NAME
+#undef IS_PROC_PREFIX
+
         //
         // analyze each NtXxx export to find the service index number
         //
@@ -302,8 +310,7 @@ _FX BOOLEAN Syscall_Init_List32(void)
         win32k_code = Dll_RvaToAddr(dll, proc_offset);
         if (win32k_code) {
 
-            syscall_index =
-                Syscall_GetIndexFromNtdll(win32k_code, name, name_len);
+            syscall_index = Syscall_GetIndexFromNtdll(win32k_code);
 
             if (syscall_index == -2) {
                 //
@@ -353,6 +360,7 @@ _FX BOOLEAN Syscall_Init_List32(void)
         entry->handler1_func = NULL;
         entry->handler2_func = NULL;
         entry->handler3_func_support_procmon = NULL;
+        entry->approved = (Syscall_HookMapMatch(name, name_len, &approved_syscalls) != 0);
         entry->name_len = (USHORT)name_len;
         memcpy(entry->name, name, name_len);
         entry->name[name_len] = '\0';
@@ -397,6 +405,8 @@ finish:
 
     Syscall_FreeHookMap(&enabled_hooks);
     Syscall_FreeHookMap(&disabled_hooks);
+
+    Syscall_FreeHookMap(&approved_syscalls);
 
     if (base_copy)
         Mem_Free(base_copy, ShadowTable->Limit * sizeof(long));
@@ -492,7 +502,8 @@ _FX NTSTATUS Syscall_Api_Invoke32(PROCESS* proc, ULONG64* parms)
 
     // DbgPrint("[syscall] request p=%06d t=%06d - BEGIN %s\n", PsGetCurrentProcessId(), PsGetCurrentThreadId(), entry->name);
 
-    Thread_SetThreadToken(proc);        // may set proc->terminated
+    if(!proc->is_locked_down || entry->approved)
+        Thread_SetThreadToken(proc);        // may set proc->terminated
 
 //    if (proc->terminated) {
 //
@@ -583,7 +594,8 @@ _FX NTSTATUS Syscall_Api_Invoke32(PROCESS* proc, ULONG64* parms)
                 status);
             const WCHAR* strings[3] = { trace_str, trace_str + (entry->name_len + 2), NULL };
             ULONG lengths[3] = {entry->name_len, wcslen(trace_str) - (entry->name_len + 2), 0 };
-            Session_MonitorPutEx(MONITOR_SYSCALL | MONITOR_TRACE, strings, lengths, PsGetCurrentProcessId(), PsGetCurrentThreadId());
+            Session_MonitorPutEx(MONITOR_SYSCALL | (entry->approved ? MONITOR_OPEN : MONITOR_TRACE), 
+                strings, lengths, PsGetCurrentProcessId(), PsGetCurrentThreadId());
         }
 
 #ifdef _WIN64
@@ -700,3 +712,25 @@ _FX NTSTATUS Syscall_Api_Query32(PROCESS *proc, ULONG64 *parms)
     return STATUS_SUCCESS;
 }
 
+//---------------------------------------------------------------------------
+// Syscall_Update_Lockdown32
+//---------------------------------------------------------------------------
+
+
+_FX void Syscall_Update_Lockdown32()
+{
+    SYSCALL_ENTRY *entry;
+
+    LIST approved_syscalls;
+    Syscall_LoadHookMap(L"ApproveWin32SysCall", &approved_syscalls);
+
+    entry = List_Head(&Syscall_List32);
+    while (entry) {
+
+        entry->approved = (Syscall_HookMapMatch(entry->name, entry->name_len, &approved_syscalls) != 0);
+
+        entry = List_Next(entry);
+    }
+
+    Syscall_FreeHookMap(&approved_syscalls);
+}

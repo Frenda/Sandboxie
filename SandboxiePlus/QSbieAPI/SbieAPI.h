@@ -43,6 +43,7 @@ public:
 	virtual SB_STATUS		Connect(bool takeOver, bool withQueue);
 	virtual SB_STATUS		Disconnect();
 	virtual bool			IsConnected() const;
+	static  bool			IsWow64();
 
 	virtual QString			GetVersion();
 
@@ -112,6 +113,8 @@ public:
 		eSbieFeaturePMod		= 0x00000004,
 		eSbieFeatureAppC		= 0x00000008,
 		eSbieFeatureSbiL		= 0x00000010,
+
+		eSbieFeatureARM64		= 0x40000000,
 		eSbieFeatureCert		= 0x80000000
 	};
 
@@ -139,14 +142,19 @@ public:
 
 	virtual quint32			GetSessionID() const;
 
+	virtual SB_STATUS		SetSecureParam(const QString& Name, const void* data, size_t size);
+	virtual SB_STATUS		GetSecureParam(const QString& Name, void* data, size_t size);
+
 
 	enum ESbieQueuedRequests
 	{
 		ePrintSpooler = -1,
 		eInvalidQueuedRequests = 0,
 		eFileMigration = 1,
-		eInetBlockade= 2,
+		eInetBlockade = 2,
 	};
+
+	void					LoadEventLog();
 
 public slots:
 	virtual void			SendReplyData(quint32 RequestId, const QVariantMap& Result);
@@ -158,8 +166,12 @@ signals:
 	void					LogSbieMessage(quint32 MsgCode, const QStringList& MsgData, quint32 ProcessId);
 	void					ProcessBoxed(quint32 ProcessId, const QString& Path, const QString& Box, quint32 ParentId);
 	void					FileToRecover(const QString& BoxName, const QString& FilePath, const QString& BoxPath, quint32 ProcessId);
-	void					BoxOpened(const QString& BoxName);
-	void					BoxClosed(const QString& BoxName);
+
+	void					BoxAdded(const CSandBoxPtr& pBox);
+	void					BoxOpened(const CSandBoxPtr& pBox);
+	void					BoxClosed(const CSandBoxPtr& pBox);
+	void					BoxRemoved(const CSandBoxPtr& pBox);
+
 	void					NotAuthorized(bool bLoginRequired, bool &bRetry);
 	void					QueuedRequest(quint32 ClientPid, quint32 ClientTid, quint32 RequestId, const QVariantMap& Data);
 

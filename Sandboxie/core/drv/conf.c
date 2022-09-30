@@ -1468,11 +1468,8 @@ _FX NTSTATUS Conf_Api_Reload(PROCESS *proc, ULONG64 *parms)
             }
         }
 
-        extern UCHAR SandboxieLogonSid[SECURITY_MAX_SID_SIZE];
-        if (Conf_Get_Boolean(NULL, L"AllowSandboxieLogon", 0, FALSE) && SandboxieLogonSid[0] == 0) {
-            extern BOOLEAN Token_Init_SbieLogin(void);
-            Token_Init_SbieLogin();
-        }
+        void Syscall_Update_Lockdown();
+        Syscall_Update_Lockdown();
 
         /*
 #ifdef HOOK_WIN32K
