@@ -9,7 +9,7 @@
 
 bool IsDebuggerAttached()
 {
-	bool isDebuggerPresent = false; // Note: on linux change edit the value in debgger to indicate precense
+	bool isDebuggerPresent = false; // Note: on linux change edit the value in debgger to indicate presence
 #ifdef WIN32
 	if (IsDebuggerPresent())
 		return true;
@@ -200,7 +200,7 @@ static LONG __stdcall MyCrashHandlerExceptionFilter(EXCEPTION_POINTERS* pEx)
 #ifdef _M_IX86
   if (pEx->ExceptionRecord->ExceptionCode == EXCEPTION_STACK_OVERFLOW)  
   {
-    // be sure that we have enought space...
+    // be sure that we have enough space...
     static char MyStack[1024*128];  
     // it assumes that DS and SS are the same!!! (this is the case for Win32)
     // change the stack only if the selectors are the same (this is the case for Win32)
@@ -274,7 +274,7 @@ void InitMiniDumpWriter(const wchar_t* Name, const wchar_t* Path)
   ASSERT(wcslen(Path) < ARRSIZE(s_szMiniDumpPath));
   wcscpy(s_szMiniDumpPath, Path);
 
-  // Initialize the member, so we do not load the dll after the exception has occured
+  // Initialize the member, so we do not load the dll after the exception has occurred
   // which might be not possible anymore...
   s_hDbgHelpMod = LoadLibrary(L"dbghelp.dll");
   if (s_hDbgHelpMod != NULL)

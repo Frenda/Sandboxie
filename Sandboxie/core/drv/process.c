@@ -29,7 +29,9 @@
 #include "ipc.h"
 #include "api.h"
 #include "dll.h"
+#ifndef _M_ARM64
 #include "hook.h"
+#endif
 #include "session.h"
 #include "gui.h"
 #include "token.h"
@@ -1188,7 +1190,7 @@ _FX BOOLEAN Process_NotifyProcess_Create(
 #ifdef DRV_BREAKOUT
         //
         // check if this process is set up as break out program,
-        // it must't be located in a sandboxed for this to work.
+        // it mustn't be located in a sandboxed for this to work.
         //
 
         BOX* breakout_box = NULL;

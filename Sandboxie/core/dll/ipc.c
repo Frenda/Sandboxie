@@ -326,7 +326,7 @@ BOOLEAN RpcRt_IsDynamicPortOpen(const WCHAR* wszPortName);
 
 _FX BOOLEAN Ipc_Init(void)
 {
-    HMODULE module = NULL;
+    HMODULE module = Dll_Ntdll;
 
     void *NtAlpcCreatePort;
     void *NtAlpcConnectPort;
@@ -407,7 +407,9 @@ _FX BOOLEAN Ipc_Init(void)
     }
 
     //if (!Dll_AlernateIpcNaming) // alternate naming does not need an own namespace
-    Ipc_CreateObjects();
+    if (Dll_FirstProcessInBox) {
+        Ipc_CreateObjects();
+    }
 
     List_Init(&Ipc_DynamicPortNames);
 
@@ -557,7 +559,7 @@ _FX NTSTATUS Ipc_GetName(
         //if (Dll_AlernateIpcNaming) {
         //    
         //    //
-        //    // Since in this mode we don't call Ipc_CreateObjects we dont have a boxed namespace
+        //    // Since in this mode we don't call Ipc_CreateObjects we don't have a boxed namespace
         //    // and are using existing namespaces only with a name suffix
         //    // hence we can't use Global without system provileges, so we strip it
         //    //
@@ -3678,7 +3680,7 @@ finish:
     }
 
     if (err) {
-        SbieApi_Log(2205, L"ConnectPort (%02X/%08X)", err, status);
+        SbieApi_Log(2205, L"ConnectPort (%02X/%08X) %S", err, status, TruePath);
         if (status == STATUS_SUCCESS)
             status = STATUS_INVALID_PARAMETER;
     }

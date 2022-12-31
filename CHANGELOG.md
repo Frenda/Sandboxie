@@ -4,20 +4,247 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 
 
+## [1.6.4 / 5.61.4] - 2022-12-30
+
+### Added
+- added option to disable sandbox clean-up on startup [#2553](https://github.com/sandboxie-plus/Sandboxie/issues/2553)
+
+### Fixed
+- fixed issue with auto delete sandbox on SandMan startup [#2555](https://github.com/sandboxie-plus/Sandboxie/issues/2555)
+- fixed issue with Windows 11 context menu when SandMan was not already running [#2284](https://github.com/sandboxie-plus/Sandboxie/issues/2284)
+- fixed issue with the display about cmbDefault [#2560](https://github.com/sandboxie-plus/Sandboxie/pull/2560) (okrc)
+- fixed issue with templates.ini loading on first start [#2574](https://github.com/sandboxie-plus/Sandboxie/issues/2574)
+- fixed cyberpunk2077 not being to load mods when sandboxed
+- fixed performance issue in games
+
+
+
+## [1.6.3 / 5.61.3] - 2022-12-21
+
+### Changed
+- improved Network Location Awareness template
+
+
+
+## [1.6.2b / 5.61.2] - 2022-12-21
+
+### Fixed
+- fixed issue with update label when "Version Updates" drop-down menu was set to "Ignore"
+- fixed issue with WoW64 thunking on 32-bit Windows 10 systems [#2546](https://github.com/sandboxie-plus/Sandboxie/issues/2546)
+- fixed issue with auto delete option not working in sandboxes [#2531](https://github.com/sandboxie-plus/Sandboxie/issues/2531)
+-- Note: a clean-up is now done after each reboot
+- fixed issue with Network Location Awareness under Windows 11 [#2530](https://github.com/sandboxie-plus/Sandboxie/issues/2530)
+- fixed issues with recovery window [#2458](https://github.com/sandboxie-plus/Sandboxie/issues/2458)
+
+
+
+## [1.6.2a / 5.61.2] - 2022-12-19
+
+### Fixed
+- fixed crash issue in Vintage UI introduced in 1.6.1a
 
 
 
 
-## [1.4.0 / 5.59.0] - 2022-??-??
+## [1.6.2 / 5.61.2] - 2022-12-19
+
+### Added
+- added template for Tencent TIM [#2516](https://github.com/sandboxie-plus/Sandboxie/pull/2516) (thanks TooYoungTooSimp)
+
+
+
+## [1.6.1b / 5.61.1] - 2022-12-16
+
+### Added
+- added game/presentation mode [#2534](https://github.com/sandboxie-plus/Sandboxie/issues/2534)
+- added option to pick a custom box icon
+
+### Fixed
+- fixed support setting page not showing version updates properly
+
+
+
+
+## [1.6.1a / 5.61.1] - 2022-12-07
+
+### Added
+- added "Run Sandboxed" command to the sandbox menu
+- DefaultBox can now be replaced with another sandbox [#2445](https://github.com/sandboxie-plus/Sandboxie/issues/2445)
+
+### Fixed
+- improved fix for [#2495](https://github.com/sandboxie-plus/Sandboxie/issues/2495)
+
+
+
+## [1.6.1 / 5.61.1] - 2022-12-04
+
+### Added
+- added global option to introduce run menu entries to all boxes
+
+### Changed
+- reorganized command prompt entries [#2451](https://github.com/sandboxie-plus/Sandboxie/issues/2451)
+- the "live" update channel is now part of the "preview" channel for which version updates can now be disabled
+
+### Fixed
+- fixed issue with support setting drop-down menu multiplying [#2502](https://github.com/sandboxie-plus/Sandboxie/pull/2502) (okrc)
+- added translations folder as deprecated, to be removed upon installation [#2500](https://github.com/sandboxie-plus/Sandboxie/pull/2500) (lufog)
+- fixed issue with disk usage of hidden items not counted [#2503](https://github.com/sandboxie-plus/Sandboxie/pull/2503) (okrc)
+- fixed issue with boolean settings which can also be set per process [#2495](https://github.com/sandboxie-plus/Sandboxie/issues/2495)
+- fixed issue with disk usage of hidden items not counted [#2503](https://github.com/sandboxie-plus/Sandboxie/pull/2503)
+
+
+
+## [1.6.0 / 5.61.0] - 2022-11-26
+
+### Added
+- added ability to import/export boxes into 7z files
+- added new update mechanism allowing for incremental updates
+-- used for nightly test builds in the "live" update channel
+-- used to update Templates.ini and translations after installation [#1105](https://github.com/sandboxie-plus/Sandboxie/issues/1105)
+
+### Changed
+- restructured the box context menu a bit
+- SandMan translations are now compressed and located in translations.7z
+
+### Fixed
+- fixed issue with recycle icon not updated in time [#2457](https://github.com/sandboxie-plus/Sandboxie/issues/2457) (thanks okrc)
+- fixed issue with "index out of range" [#2470](https://github.com/sandboxie-plus/Sandboxie/pull/2470) (thanks okrc)
+- fixed issue starting SandMan after install [#2284](https://github.com/sandboxie-plus/Sandboxie/issues/2284)
+- fixed encoding issue with my_version.h [#2475](https://github.com/sandboxie-plus/Sandboxie/issues/2475)
+- fixed issue with empty group blinking sequence [#2486](https://github.com/sandboxie-plus/Sandboxie/pull/2486) (thanks okrc)
+
+
+
+
+## [1.5.3 / 5.60.3] - 2022-11-08
+
+### Added
+- boxes set to auto-delete are now marked with a small red recycle symbol
+- added Vietnamese language on Plus UI [#2438](https://github.com/sandboxie-plus/Sandboxie/pull/2438)
+
+### Fixed
+- fixed issue with box options [#2400](https://github.com/sandboxie-plus/Sandboxie/issues/2400)
+- fixed issue with Smart App Control [#2341](https://github.com/sandboxie-plus/Sandboxie/issues/2341)
+- fixed issue with snapshots when using privacy boxes [#2427](https://github.com/sandboxie-plus/Sandboxie/issues/2427)
+- fixed issue with m_pColorslider change not applied [#2433](https://github.com/sandboxie-plus/Sandboxie/pull/2433) (thanks okrc)
+- fixed issue with switching snapshots when the file panel is open
+- fixed issue with file panel when an empty box is selected [#2419](https://github.com/sandboxie-plus/Sandboxie/issues/2419)
+- fixed issue with menu icon not being disabled [#2406](https://github.com/sandboxie-plus/Sandboxie/issues/2406)
+- fixed compatibility issue with Microsoft Edge [#2312](https://github.com/sandboxie-plus/Sandboxie/issues/2312)
+- fixed UsePrivacyMode=y compatibility with Windows 7 [#2423](https://github.com/sandboxie-plus/Sandboxie/issues/2423)
+- fixed minor issue during Sandboxie Plus uninstall [#2421](https://github.com/sandboxie-plus/Sandboxie/issues/2421)
+- fixed BSOD issue when driver initialization fails (introduced in 1.5.1) [#2431](https://github.com/sandboxie-plus/Sandboxie/issues/2431)
+- fixed fake paths being listed even if true paths do not exist [#2403](https://github.com/sandboxie-plus/Sandboxie/issues/2403)
+- fixed issue with Firefox 106.x requesting write access to plugin executables [#2391](https://github.com/sandboxie-plus/Sandboxie/issues/2391) [#2411](https://github.com/sandboxie-plus/Sandboxie/issues/2411)
+
+
+
+
+
+## [1.5.2 / 5.60.2] - 2022-10-28
+
+### Changed
+- utility groups are now cleaned up automatically
+- improved removal of leftovers [#2409](https://github.com/sandboxie-plus/Sandboxie/pull/2409)
+
+### Fixed
+- fixed issues with SBIE2227 on virtual drives
+- fixed issues on native 32-bit Windows introduced with 1.5.0 [#2401](https://github.com/sandboxie-plus/Sandboxie/issues/2401)
+
+
+
+## [1.5.1 / 5.60.1] - 2022-10-26
+
+### Added
+- added SBIE2227 warning when a sandbox is located on a volume without 8.3 name support
+- added template for Tencent QQ [#2367](https://github.com/sandboxie-plus/Sandboxie/issues/2367)
+
+### Fixed
+- fixed issues when renaming a sandbox with a custom path [#2368](https://github.com/sandboxie-plus/Sandboxie/issues/2368)
+- properly fixed the Firefox 106 issue [46e9979](https://github.com/sandboxie-plus/Sandboxie/commit/46e99799e2b753b85224dc921ec141a05025acfd)
+- fixed issue with alternative UI modes [#2380](https://github.com/sandboxie-plus/Sandboxie/issues/2380)
+- fixed command line corruption with breakout processes [#2377](https://github.com/sandboxie-plus/Sandboxie/issues/2377)
+- fixed issues with Privacy Enhanced box types [#2342](https://github.com/sandboxie-plus/Sandboxie/issues/2342)
+- fixed issue with boxed object directory initialization [#2342](https://github.com/sandboxie-plus/Sandboxie/issues/2342)
+- Sandboxie no longer leaves behind permanent directory objects
+- FIXED SECURITY ISSUE ID-21 AlpcConnectPortEx was not filtered by the driver [#2396](https://github.com/sandboxie-plus/Sandboxie/issues/2396)
+- fixed issues with program control options [#2395](https://github.com/sandboxie-plus/Sandboxie/issues/2395)
+
+
+
+## [1.5.0 / 5.60.0] - 2022-10-19
+
+### Added
+- Added support for Windows on ARM64 [#1321](https://github.com/sandboxie-plus/Sandboxie/issues/1321) [#645](https://github.com/sandboxie-plus/Sandboxie/issues/645)
+-- ported SbieDrv for ARM64
+-- ported low-level injection mechanism for ARM64/ARM64EC
+-- ported syscall hooks for ARM64/ARM64EC
+-- ported SbieDll.dll to ARM64/ARM64EC
+-- Note: ARM32 on ARM64 is not implemented and will terminate with message SBIE2338
+-- Note: when Sandboxie is running, it disables the use of CHPE binaries for x86 processes globally - as required for the forced process functionality. This can be disabled by adding the global option "DisableCHPE=n" to the Sandboxie.ini, which will terminate x86 processes started outside the sandbox with message SBIE2338, instead of being forced
+
+### fixed
+- fixed issue with Win32 hooks in x86 applications
+- avoid window overlap when editing templates [#2339](https://github.com/sandboxie-plus/Sandboxie/pull/2339) (thanks okrc)
+- fixed incorrect write of OpenWinClass UI setting [#2347](https://github.com/sandboxie-plus/Sandboxie/pull/2347) (thanks okrc)
+- fixed issue with local template [#2338](https://github.com/sandboxie-plus/Sandboxie/pull/2338) (thanks okrc)
+- fixed Edge WebView2 compatibility issue [#2350](https://github.com/sandboxie-plus/Sandboxie/issues/2350)
+- added provisional workaround for Firefox 106 content process sandbox issue
+- fixed bug with renaming sandboxes [#2358](https://github.com/sandboxie-plus/Sandboxie/pull/2358) (thanks okrc)
+
+### Changed
+- reworked API compatibility check
+- breakout process is now available for all users
+
+
+
+
+## [1.4.2 / 5.59.2] - 2022-10-10
+
+### Added
+- added tooltips to resource access modes [#2300](https://github.com/sandboxie-plus/Sandboxie/issues/2300)
+- added UI option to control ApplyElevateCreateProcessFix [#2302](https://github.com/sandboxie-plus/Sandboxie/issues/2302)
+- added message 2226 if a process needs 'ApplyElevateCreateProcessFix=y'
+
+### Changed
+- moved Restrictions tab from the new Security page back to the General page
+
+### Fixed
+- fixed wrong button captions in the breakout process page
+- fixed issue with saving box recovery options
+- fixed the display problem of SandMan [#2306](https://github.com/sandboxie-plus/Sandboxie/pull/2306) (thanks okrc)
+- fixed theme not auto-changing [#2307](https://github.com/sandboxie-plus/Sandboxie/pull/2307)
+- fixed issue with saving SandMan window state on Windows shutdown
+- fixed miscellaneous minor issues [#2301](https://github.com/sandboxie-plus/Sandboxie/issues/2301)
+- fixed issue with Microsoft Edge introduced in 106.x [#2325](https://github.com/sandboxie-plus/Sandboxie/issues/2325)
+- fixed Vivaldi hooking issue, UseVivaldiWorkaround is no longer needed [#1783](https://github.com/sandboxie-plus/Sandboxie/issues/1783)
+- fixed issues with miscellaneous tab on the advanced options page [#2315](https://github.com/sandboxie-plus/Sandboxie/issues/2315#issuecomment-1272544086)
+
+
+
+## [1.4.1 / 5.59.1] - 2022-10-05
+
+### Added
+- added dark title bar support for Windows 11 [#2299](https://github.com/sandboxie-plus/Sandboxie/pull/2299)
+
+### Changed
+- in Sbie 5.28 and later WinInetCache is open, which breaks IE's source view, therefore it can now be disabled with 'CloseWinInetCache=y'
+
+### Fixed
+- fixed WarnProcess and WarnFolder not working with certain configurations
+
+
+
+## [1.4.0 / 5.59.0] - 2022-09-30
 
 ### Added
 - added integrated run from start menu [#1836](https://github.com/sandboxie-plus/Sandboxie/issues/1836)
 - added start menu enumeration [#1570](https://github.com/sandboxie-plus/Sandboxie/issues/1570)
 - added UI for breakout processes [#1904](https://github.com/sandboxie-plus/Sandboxie/issues/1904)
 - added option to customize double-click action per sandbox
-- added new advanced tab in the advanced tab allowing to configure specific processes and other advanced options
+- added new miscellaneous tab in the advanced options tab allowing to configure specific processes and other advanced options
 - added "SeparateUserFolders=y" and "SandboxieLogon=y" to the sandbox options dialog
-- added icons to option section labels
+- added icons to the section labels on the option pages
 
 
 ### Changed
@@ -32,7 +259,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [1.3.5 / 5.58.5] - 2022-09-26
 
-### Added 
+### Added
 - added localization to Windows 11 shell menu [#2229](https://github.com/sandboxie-plus/Sandboxie/issues/2229)
 
 ### Changed
@@ -50,7 +277,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 ## [1.3.4 / 5.58.4] - 2022-09-19
 
 ### Added
-- Added NoRenameWinClass to the Plus UI 
+- Added NoRenameWinClass to the Plus UI
 - Added Windows.UI.* to the list of hardcoded well-known classes to resolve issues with WinUI apps [#2109](https://github.com/sandboxie-plus/Sandboxie/issues/2109)
 
 ### Changed
@@ -79,7 +306,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 - added option to block host processes from accessing sandboxed ones [#2132](https://github.com/sandboxie-plus/Sandboxie/issues/2132)
 -- usage: DenyHostAccess=Program.exe,y
 -- note: by default, this protection only applies for write access, that is, unsandboxed processes will still be able to obtain read-only access
--- to prevent host processes from obtaining read access, ConfidentialBox=y must also be set, which require a supporter certificate
+-- to prevent host processes from obtaining read access, ConfidentialBox=y must also be set, which requires a supporter certificate
 - added compatibility template for ReHIPS
 - added creation of all default folders in privacy box type [#2218](https://github.com/sandboxie-plus/Sandboxie/issues/2218)
 
@@ -157,7 +384,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 -- additional syscalls may need to be allowed, this has to be done in the [GlobalSettings] and the driver must be restarted
 -- Note: boxes created as Security Enhanced with prior builds will be displayed as normal in the UI from now on
 -- the Security Enhanced icons are now repurposed for the new Super Extra Security Enhanced Box Mode
--- Note: The new enhanced security features require a supporter certificate
+-- Note: the new enhanced security features require a supporter certificate
 - added browse option to the "force process" tab
 
 ### Changed
@@ -446,7 +673,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 - added workaround for a Vivaldi hooking issue [#1783](https://github.com/sandboxie-plus/Sandboxie/issues/1783)
 -- Note: this fix is provisional, it can be disabled with UseVivaldiWorkaround=n
 - fixed registry issue with snapshots [#1782](https://github.com/sandboxie-plus/Sandboxie/issues/1782)
-- fixed issue with box grouping [#1778](https://github.com/sandboxie-plus/Sandboxie/issues/1778) [#1777](https://github.com/sandboxie-plus/Sandboxie/issues/1777) [#1776](https://github.com/sandboxie-plus/Sandboxie/issues/1776) 
+- fixed issue with box grouping [#1778](https://github.com/sandboxie-plus/Sandboxie/issues/1778) [#1777](https://github.com/sandboxie-plus/Sandboxie/issues/1777) [#1776](https://github.com/sandboxie-plus/Sandboxie/issues/1776)
 - fixed further issues with box grouping [#1698](https://github.com/sandboxie-plus/Sandboxie/issues/1698) [#1697](https://github.com/sandboxie-plus/Sandboxie/issues/1697)
 - fixed issues with snapshot UI [#1696](https://github.com/sandboxie-plus/Sandboxie/issues/1696) [#1695](https://github.com/sandboxie-plus/Sandboxie/issues/1695)
 - fixed issue with recovery dialog focus [#1374](https://github.com/sandboxie-plus/Sandboxie/issues/1374)
@@ -494,7 +721,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Changed
 - EnableObjectFiltering is now set enabled by default, and replaces Sbie's old process/thread handle filter
-- the $: syntax now accepts a wildcard $:* no more specialized wildcards though
+- the `$:` syntax now accepts a wildcard `$:*` no more specialized wildcards though
 
 ### Fixed
 - fixed NtGetNextProcess being fully disabled instead of properly filtered
@@ -550,7 +777,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 ### Added
 - added mini dump creation to SandMan.exe in case it crashes
 
-### Changed 
+### Changed
 - disabled Chrome and Firefox phishing entries in new sandboxes (by isaak654) [#1616](https://github.com/sandboxie-plus/Sandboxie/pull/1616)
 - updated Mozilla paths for the BlockSoftwareUpdaters template (by isaak654) [#1623](https://github.com/sandboxie-plus/Sandboxie/pull/1623)
 - renamed "Pause Forced Programs Rules" command to "Pause Forcing Programs" (Plus only)
@@ -671,7 +898,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 ### Changed
 - The filename "sandman_pt" was changed to "sandman_pt_BR" (Brazilian Portuguese) [#1497](https://github.com/sandboxie-plus/Sandboxie/pull/1497)
 - The filename "sandman_ua" was changed to "sandman_uk" (Ukrainian) [#1527](https://github.com/sandboxie-plus/Sandboxie/issues/1527)
--- Note: Translators are encouraged to follow the [Localization notes and tips](https://github.com/sandboxie-plus/Sandboxie/discussions/1123#discussioncomment-1203489) before creating a new pull request
+-- Note: translators are encouraged to follow the [Localization notes and tips](https://github.com/sandboxie-plus/Sandboxie/discussions/1123#discussioncomment-1203489) before creating a new pull request
 - updated Firefox update blocker (discovered by isaak654) [#1545](https://github.com/sandboxie-plus/Sandboxie/issues/1545#issuecomment-1013807831)
 
 ### Fixed
@@ -702,7 +929,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 - added experimental option "CreateToken=y" to create a new token instead of repurposing an existing one
 - added option "DisableRTBlacklist=y" allowing to disable the hardcoded runtime class blacklist
 - added new template "DeviceSecurity" to lock down access to device drivers on the system
--- Note: This template requires RuleSpecificity being available to work properly
+-- Note: this template requires RuleSpecificity being available to work properly
 - added option to set a custom ini editor in the Plus UI [#1475](https://github.com/sandboxie-plus/Sandboxie/issues/1475)
 - added option "LingerLeniency=n" to solve issue [#997](https://github.com/sandboxie-plus/Sandboxie/issues/997)
 
@@ -742,10 +969,10 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 - fixed issue with shortcuts creation introduced in a recent build [#1471](https://github.com/sandboxie-plus/Sandboxie/issues/1471)
 - fixed various issues in Privacy Enhanced boxes and rule specificity
 - fixed issue with SeAccessCheckByType and alike
-- fixed issues with Win32k hooking on 32 bit Windows [#1479](https://github.com/sandboxie-plus/Sandboxie/issues/1479)
+- fixed issues with Win32k hooking on 32-bit Windows [#1479](https://github.com/sandboxie-plus/Sandboxie/issues/1479)
 
 ### Removed
-- removed obsolete SkyNet rootkit detection from 32 bit build
+- removed obsolete SkyNet rootkit detection from 32-bit build
 
 
 
@@ -756,11 +983,11 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 -- it can be enabled per process or globally using "EnableMiniDump=process.exe,y" or "EnableMiniDump=y" respectively
 -- the dump flags can be set as hex with "MiniDumpFlags=0xAABBCCDD"
 -- a preselected flag set for a verbose dump can be set with "MiniDumpFlags=Extended"
--- Note: created dump files are located at: `C:\Sandbox\%USER%\%SANDBOX%`
+-- Note: dump files created with the EnableMiniDump option are located at: `C:\Sandbox\%USER%\%SANDBOX%`
 - added template support for Osiris and Slimjet browsers (by Dyras) [#1454](https://github.com/sandboxie-plus/Sandboxie/pull/1454)
 
 ### Changed
-- improved SbieDll initialization a bit
+- improved SbieDll initialization
 - doubled size of Name_Buffer_Depth [#1342](https://github.com/sandboxie-plus/Sandboxie/issues/1342)
 - improved text filter in the templates view [#1456](https://github.com/sandboxie-plus/Sandboxie/issues/1456)
 
@@ -780,15 +1007,15 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 ## [1.0.4 / 5.55.4] - 2021-12-20
 
 ### Added
-- mechanism to hook Win32 system calls now also works for 32 bit applications running under WoW64
+- mechanism to hook Win32 system calls now also works for 32-bit applications running under WoW64
 - added customization to Win32k hooking mechanism, as by default only GdiDdDDI* hooks are installed
--- You can force the installation of other hooks by specifying them with "EnableWin32Hook=..." 
+-- You can force the installation of other hooks by specifying them with "EnableWin32Hook=..."
 -- or disable the installation of the default hooks with "DisableWin32Hook=..."
 -- Please note that some Win32k hooks may cause BSODs or undefined behaviour. (!)
 -- The most obviously problematic Win32k hooks are blacklisted, this can be bypassed with "IgnoreWin32HookBlacklist=y"
 - added debug option "AdjustBoxedSystem=n" to disable the adjustment of service ACLs running with a system token
 - added "NoUACProxy=y" option together with the accompanying template, in order to disable UAC proxy
--- Note: Boxes configured in compartment mode activate this template by default
+-- Note: boxes configured in compartment mode activate this template by default
 - added UI option to change default RpcMgmtSetComTimeout preset
 - added Plus installer option to start the default browser under Sandboxie through a desktop shortcut
 - added more entries to the Plus installer (current translations on [Languages.iss](https://github.com/sandboxie-plus/Sandboxie/blob/master/Installer/Languages.iss) file need to be updated)
@@ -796,12 +1023,12 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 ### Changed
 - "EnableWin32kHooks=y" is now enabled by default, as no issues were reported in 1.0.3
 -- Note: currently only the GdiDdDDI* hooks are applied, required for Chromium HW acceleration
-- cleaned up low level hooking code a bit
+- cleaned up low-level hooking code
 - "RunRpcssAsSystem=y" is now auto applied for boxes in "App Compartment" mode when "RunServicesAsSystem=y" or "MsiInstallerExemptions=y" are present
 
 ### Fixed
 - fixed RPC handling in case a requested open service is not running [#1443](https://github.com/sandboxie-plus/Sandboxie/issues/1443)
-- fixed a hooking issue with NdrClientCall2 in 32 bit applications
+- fixed a hooking issue with NdrClientCall2 in 32-bit applications
 - fixed issue with start directory to run sandboxed when using SandMan [#1436](https://github.com/sandboxie-plus/Sandboxie/issues/1436)
 - fixed issue with recovering from network share locations [#1435](https://github.com/sandboxie-plus/Sandboxie/issues/1435)
 
@@ -811,7 +1038,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Added
 - added mechanism to hook Win32k system calls on Windows 10 and later, this should resolve the issue with Chromium HW acceleration
--- Note: this mechanism does not, yet, work for 32 bit applications running under WoW64
+-- Note: this mechanism does not, yet, work for 32-bit applications running under WoW64
 -- to enable it, add "EnableWin32kHooks=y" to the global ini section, this feature is highly experimental (!)
 -- the hooks will be automatically applied to Chromium GPU processes
 -- to force Win32k hooks for all processes in a selected box, add "AlwaysUseWin32kHooks=program.exe,y" [#1261](https://github.com/sandboxie-plus/Sandboxie/issues/1261) [#1395](https://github.com/sandboxie-plus/Sandboxie/issues/1395)
@@ -856,7 +1083,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [1.0.0 / 5.55.0] - 2021-11-17
 
-### Added 
+### Added
 - added Privacy enhanced mode, sandboxes with "UsePrivacyMode=y" will not allow read access to locations containing user data
 -- all locations except generic Windows system paths will need to be opened explicitly for read and/or write access
 -- using "NormalFilePath=...", "NormalKeyPath=...", "NormalIpcPath=..." allows to open locations to be readable and sandboxed
@@ -866,7 +1093,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 -- Note: in this mode, file and registry filtering are still in place, hence processes run without administrative privileges
 -- it is reasonably safe, all filtering can be disabled with "NoSecurityFiltering=y"
 
-- added experimental use of ObRegisterCallbacks to filter object creation and duplication 
+- added experimental use of ObRegisterCallbacks to filter object creation and duplication
 -- this filtering is independent from the regular SbieDrv's syscall-based filtering, hence it also applies to App Compartments
 -- with it enabled, an application running in a compartment will not be able to manipulate processes running outside the sandbox
 -- Note: this feature improves the security of non-isolated App Compartment boxes
@@ -961,8 +1188,8 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [0.9.8 / 5.53.0] - 2021-10-15
 
-### Added 
-- added debug switch to disable Sbie console redirection "NoSandboxieConsole=y" 
+### Added
+- added debug switch to disable Sbie console redirection "NoSandboxieConsole=y"
 -- Note: this was previously part of "NoSandboxieDesktop=y"
 - added Sbie+ version to the log [#1277](https://github.com/sandboxie-plus/Sandboxie/issues/1277)
 - added uninstall clean-up of extra files for the Plus installer (by mpheath) [#1235](https://github.com/sandboxie-plus/Sandboxie/pull/1235)
@@ -1100,7 +1327,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Changed
 - changed command prompt icon and string from "Terminal" to "Command Prompt" [#1135](https://github.com/sandboxie-plus/Sandboxie/issues/1135)
-- reworked box menu layout a bit
+- reworked box menu layout
 
 ### Fixed
 - fixed driver compatibility with Windows Server 2022 (build 20348) [#1143](https://github.com/sandboxie-plus/Sandboxie/issues/1143)
@@ -1118,7 +1345,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 - added option to disable process termination prompt [#514](https://github.com/sandboxie-plus/Sandboxie/issues/514)
 - added "Options/InstantRecovery" setting to sandboxie-plus.ini to use the recovery window instead of the notification pop-up [#988](https://github.com/sandboxie-plus/Sandboxie/issues/988)
 - added ability to rename a non-empty sandbox [#1100](https://github.com/sandboxie-plus/Sandboxie/issues/1100)
-- added ability to remove a non-empty sandbox 
+- added ability to remove a non-empty sandbox
 - added file browser window to SandMan UI to cover the file-view functionality of SbieCtrl [#578](https://github.com/sandboxie-plus/Sandboxie/issues/578)
 
 ### Changed
@@ -1147,7 +1374,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 - fixed issue with multiple files with the same name, by always showing the extension [#1041](https://github.com/sandboxie-plus/Sandboxie/issues/1041)
 - fixed multiple program grouping issues with the SandMan UI [#1054](https://github.com/sandboxie-plus/Sandboxie/issues/1054)
 - fixed "no disk" error [#966](https://github.com/sandboxie-plus/Sandboxie/issues/966)
-- fixed issue with 32bit build using qMake, the -O2 option resulted in a crash in the QSbieAPI.dll [#995](https://github.com/sandboxie-plus/Sandboxie/issues/995)
+- fixed issue with 32-bit build using qMake, the -O2 option resulted in a crash in the QSbieAPI.dll [#995](https://github.com/sandboxie-plus/Sandboxie/issues/995)
 - fixed issue with UserSettings introduced in a recent build [#1054](https://github.com/sandboxie-plus/Sandboxie/issues/1054)
 
 
@@ -1158,8 +1385,8 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 - added ability to reconfigure the driver, which allows enabling/disabling WFP and other features without a reload/reboot
 
 ### Changed
-- reorganized and improved the settings window
-- improved the tray icon a bit, the sand is now more yellow
+- reorganised and improved the settings window
+- improved the tray icon, the sand colour is more yellow now
 
 ### Fixed
 - fixed issue with process start handling introduced in 5.51.0 [#1063](https://github.com/sandboxie-plus/Sandboxie/issues/1063)
@@ -1393,7 +1620,7 @@ Fixed issue with Windows 7
 - fixed an issue with Driver Verifier and user handles
 - fixed driver memory leak of FLT_FILE_NAME_INFORMATION objects
 - fixed broken clipboard introduced in 5.50.0 [#899](https://github.com/sandboxie-plus/Sandboxie/issues/899)
-- fixed DcomLaunch issue on Windows 7 32 bit introduced in 5.50.0 [#898](https://github.com/sandboxie-plus/Sandboxie/issues/898)
+- fixed DcomLaunch issue on Windows 7 32-bit introduced in 5.50.0 [#898](https://github.com/sandboxie-plus/Sandboxie/issues/898)
 
 
 
@@ -1448,7 +1675,7 @@ Fixed issue with Windows 7
 - workaround for Electron apps, by forcing an additional command line argument on the GPU renderer process [#547](https://github.com/sandboxie-plus/Sandboxie/issues/547) [#310](https://github.com/sandboxie-plus/Sandboxie/issues/310) [#215](https://github.com/sandboxie-plus/Sandboxie/issues/215)
 - fixed issue with Software Compatibility tab that doesn't always show template names correctly [#774](https://github.com/sandboxie-plus/Sandboxie/issues/774)
 
- 
+
 
 ## [0.7.4 / 5.49.7] - 2021-04-11
 
@@ -1473,7 +1700,7 @@ Fixed issue with Windows 7
 - fixed broken paths in The Bat! template (by isaak654) [#756](https://github.com/sandboxie-plus/Sandboxie/pull/756)
 - fixed issue about media players that attempt to write unneeded media files inside the box (by Dyras) [#743](https://github.com/sandboxie-plus/Sandboxie/pull/743) [#536](https://github.com/sandboxie-plus/Sandboxie/issues/536)
 
- 
+
 
 ## [0.7.3 / 5.49.5] - 2021-03-27
 
@@ -1506,7 +1733,7 @@ Fixed issue with Windows 7
 -- since the runas facility is not accessible by default, this did not constitute a security issue
 -- to enable runas functionality, add "OpenIpcPath=\RPC Control\SECLOGON" to your Sandboxie.ini
 -- please take note that doing so may open other yet unknown issues
-- fixed a driver compatibility issue with Windows 10 32 bit Insider Preview Build 21337
+- fixed a driver compatibility issue with Windows 10 32-bit Insider Preview Build 21337
 - fixed issues with driver signature for Windows 7
 
 
@@ -1551,7 +1778,7 @@ Fixed issue with Windows 7
 ### Changed
 - SbieCrypto no longer triggers message 1313
 - changed enum process API; now more than 511 processes per box can be enumerated (no limit)
-- reorganized box settings a bit
+- reorganised box settings
 - made COM tracing more verbose
 - "RpcMgmtSetComTimeout=y" is now again the default behaviour, it seems to cause less issues overall
 
@@ -1597,7 +1824,7 @@ Fixed issue with Windows 7
 - added UI language auto-detection
 
 ### Fixed
-- fixed Brave.exe now being properly recognized as Chrome-, not Firefox-based 
+- fixed Brave.exe now being properly recognized as Chrome-, not Firefox-based
 - fixed issue introduced in 0.6.5 with recent Edge builds
 -- the 0.6.5 behaviour can be set on a per-process basis using "RpcMgmtSetComTimeout=POPPeeper.exe,n"
 - fixed grouping issues [#445](https://github.com/sandboxie-plus/Sandboxie/issues/445)
@@ -1701,7 +1928,7 @@ Fixed issue with Windows 7
 
 ### Changed
 - improved access tracing, removed redundant entries
-- OpenIpcPath=\BaseNamedObjects\[CoreUI]-* is now hardcoded in the driver no need for the template entry 
+- OpenIpcPath=\BaseNamedObjects\[CoreUI]-* is now hardcoded in the driver no need for the template entry
 - WindowsFontCache is now open by default
 - refactored some IPC code in the driver
 
@@ -1749,8 +1976,8 @@ Fixed issue with Windows 7
 ### Added
 - FIXED SECURITY ISSUE ID-4: Sandboxie now strips particularly problematic privileges from sandboxed system tokens
 -- with those a process could attempt to bypass the sandbox isolation (thanks Diversenok)
--- old legacy behaviour can be enabled with "StripSystemPrivileges=n" (absolutely NOT Recommended) 
-- added new isolation options "ClosePrintSpooler=y" and "OpenSmartCard=n" 
+-- old legacy behaviour can be enabled with "StripSystemPrivileges=n" (absolutely NOT Recommended)
+- added new isolation options "ClosePrintSpooler=y" and "OpenSmartCard=n"
 -- those resources are open by default, but for a hardened box it is desired to close them
 - FIXED SECURITY ISSUE ID-5: added print spooler filter to prevent printers from being set up outside the sandbox
 -- the filter can be disabled with "OpenPrintSpooler=y"
@@ -1761,7 +1988,7 @@ Fixed issue with Windows 7
 ### Changed
 - Changed Emulated SCM behaviour, boxed services are no longer by default started as boxed system
 -- use "RunServicesAsSystem=y" to enable the old legacy behaviour
--- Note: sandboxed services with a system token are still sandboxed and restricted 
+-- Note: sandboxed services with a system token are still sandboxed and restricted
 -- However not granting them a system token in the first place removes possible exploit vectors
 -- Note: this option is not compatible with "ProtectRpcSs=y" and takes precedence!
 - reworked dynamic IPC port handling
@@ -1792,8 +2019,8 @@ Fixed issue with Windows 7
 - added command line column to the process view in the SandMan UI
 
 ### Fixed
-- fixed a few issues with group handling [#262](https://github.com/sandboxie-plus/Sandboxie/issues/262) 
-- fixed issue with GetRawInputDeviceInfo when running a 32 bit program on a 64 bit system
+- fixed a few issues with group handling [#262](https://github.com/sandboxie-plus/Sandboxie/issues/262)
+- fixed issue with GetRawInputDeviceInfo when running a 32-bit program on a 64-bit system
 - fixed issue when pressing apply in the "Resource Access" tab; the last edited value was not always applied
 - fixed issue merging entries in Resource Access Monitor
 
@@ -1858,7 +2085,7 @@ Fixed issue with Windows 7
 - added saving of column sizes in the options window
 
 ### Changed
-- reorganized the advanced box options a bit
+- reorganised the advanced box options
 - changed icons (thanks Valinwolf for picking the new ones) [#235](https://github.com/sandboxie-plus/Sandboxie/issues/235)
 - updated Templates.ini (thanks isaak654) [#256](https://github.com/sandboxie-plus/Sandboxie/pull/256) [#258](https://github.com/sandboxie-plus/Sandboxie/pull/258)
 - increased max value for disable forced process time in SandMan UI
@@ -1915,7 +2142,7 @@ Fixed issue with Windows 7
 - added silent MSG_1399 boxed process start notification to keep track of short lived boxed processes
 - added ability to prevent system wide process starts, Sandboxie can now instead of just alerting also block processed on the alert list
 -- set "StartRunAlertDenied=y" to enable process blocking
-- the process start alert/block mechanism can now also handle folders use "AlertFolder=..." 
+- the process start alert/block mechanism can now also handle folders use "AlertFolder=..."
 - added ability to merge snapshots [#151](https://github.com/sandboxie-plus/Sandboxie/issues/151)
 - added icons to the sandbox context menu in the new UI
 - added more advanced options to the sandbox options window
@@ -1968,7 +2195,7 @@ Fixed issue with Windows 7
 -- Windows 10 core UI component: OpenIpcPath=\BaseNamedObjects\[CoreUI]-* solving issues with Chinese Input and Emojis [#120](https://github.com/sandboxie-plus/Sandboxie/issues/120) [#88](https://github.com/sandboxie-plus/Sandboxie/issues/88)
 -- Firefox Quantum, access to Windows's FontCachePort for compatibility with Windows 7
 - added experimental debug option "OriginalToken=y" which lets sandboxed processes retain their original unrestricted token
--- This option is comparable with "OpenToken=y" and is intended only for testing and debugging, it BREAKS most SECURITY guarantees (!)
+-- This option is comparable with "OpenToken=y" and is intended only for testing and debugging, as it breaks most security measures (!)
 - added debug option "NoSandboxieDesktop=y" it disables the desktop proxy mechanism
 -- Note: without an unrestricted token with this option applications won't be able to start
 - added debug option "NoSysCallHooks=y" it disables the sys call processing by the driver
@@ -2018,7 +2245,7 @@ Fixed issue with Windows 7
 ### Fixed
 - fixed file rename bug introduced with an earlier Driver Verifier fix [#174](https://github.com/sandboxie-plus/Sandboxie/issues/174) [#153](https://github.com/sandboxie-plus/Sandboxie/issues/153)
 - fixed issue saving access lists
-- fixed issue with program groups parsing in the SandMan UI 
+- fixed issue with program groups parsing in the SandMan UI
 - fixed issue with internet access restriction options [#177](https://github.com/sandboxie-plus/Sandboxie/issues/177) [#185](https://github.com/sandboxie-plus/Sandboxie/issues/185)
 - fixed issue deleting sandbox when located on a drive directly [#139](https://github.com/sandboxie-plus/Sandboxie/issues/139)
 
@@ -2035,7 +2262,7 @@ Fixed issue with Windows 7
 - fixed Chrome 86+ compatibility bug with Chrome's own sandbox [#149](https://github.com/sandboxie-plus/Sandboxie/issues/149)
 
 
- 
+
 ## [0.4.1 / 5.43.5] - 2020-09-12
 
 ### Added
@@ -2078,7 +2305,7 @@ Fixed issue with Windows 7
 
 ### Fixed
 - fixed issues when hooking functions from delay loaded libraries
-- fixed issues when hooking an already hooked function 
+- fixed issues when hooking an already hooked function
 - fixed issues with the new box settings editor
 
 ### Removed
@@ -2114,7 +2341,7 @@ Fixed issue with Windows 7
 - API_QUERY_PROCESS_INFO can be now used to get the original process token of sandboxed processes
 -- Note: this capability is used by TaskExplorer to allow inspecting sandbox internal tokens
 - added option "KeepTokenIntegrity=y" to make the Sbie token keep its initial integrity level (debug option)
--- Note: Do NOT USE Debug Options if you don't know their security implications (!)
+-- Note: do not use Debug Options if you don't know their security implications (!)
 - added process id to log messages very useful for debugging
 - added finder to resource log
 - added option "HideHostProcess=program.exe" to hide unsandboxed host processes

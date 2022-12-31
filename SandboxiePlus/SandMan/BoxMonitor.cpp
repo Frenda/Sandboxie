@@ -26,7 +26,7 @@ quint64 CBoxMonitor::CounDirSize(const QString& Directory, SBox* Box)
 		return TotalSize;
 
 	QDir Dir(Directory);
-	foreach(const QFileInfo & Info, Dir.entryInfoList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot))
+	foreach(const QFileInfo & Info, Dir.entryInfoList(QDir::Files | QDir::Dirs | QDir::Hidden | QDir::NoDotAndDotDot))
 	{
 		if (Info.isDir())
 			TotalSize += CounDirSize(Info.filePath(), Box);
@@ -93,7 +93,7 @@ void CBoxMonitor::run()
 
 void CBoxMonitor::UpdateBox(const QString& Path)
 {
-	// Note: this private functin runs in the main thread
+	// Note: this private function runs in the main thread
 
 	m_Mutex.lock();
 	SBox Box = m_Boxes.value(Path);

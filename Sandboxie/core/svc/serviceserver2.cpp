@@ -293,7 +293,7 @@ int ServiceServer::RunServiceAsSystem(const WCHAR* svcname, const WCHAR* boxname
     if (svcname && _wcsicmp(svcname, L"MSIServer") == 0 && SbieApi_QueryConfBool(boxname, L"MsiInstallerExemptions", FALSE))
         return 2;
 
-    // legacy behavioure option
+    // legacy behaviour option
     if (SbieApi_QueryConfBool(boxname, L"RunServicesAsSystem", FALSE)) 
         return 1;
     
@@ -382,7 +382,7 @@ ULONG ServiceServer::RunHandler2(
                 hNewToken, TokenSessionId, &idSession, sizeof(ULONG));
     }
 
-    if (ok && asSys) { // we don't need to adapt Dacl when we run this service as a regular user
+    if (ok && asSys) { // we don't need to adapt DACL when we run this service as a regular user
         errlvl = 0x26;
         HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, (ULONG)(ULONG_PTR)idProcess);
         if (!hProcess)

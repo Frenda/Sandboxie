@@ -3,6 +3,15 @@
 #include "../QSbieAPI/SbieAPI.h"
 #include "BoxJob.h"
 
+enum ESbieExMsgCodes
+{
+	SBX_FirstError = SB_LastError,
+	SBX_7zNotReady,
+	SBX_7zCreateFailed,
+	SBX_7zOpenFailed,
+	SBX_7zExtractFailed,
+	SBX_NotBoxArchive
+};
 
 class CSbiePlusAPI : public CSbieAPI
 {
@@ -27,6 +36,7 @@ public:
 
 private slots:
 	virtual void			OnStartFinished();
+	virtual void			SbieIniSetSection(const QString& Section, const QString& Value) { SbieIniSet(Section, "", Value); }
 
 protected:
 	friend class CSandBoxPlus;
@@ -56,6 +66,9 @@ public:
 	CSandBoxPlus(const QString& BoxName, class CSbieAPI* pAPI);
 	virtual ~CSandBoxPlus();
 
+	SB_PROGRESS				ExportBox(const QString& FileName);
+	SB_PROGRESS				ImportBox(const QString& FileName);
+
 	virtual void			UpdateDetails();
 
 	virtual void			ScanStartMenu();
@@ -66,6 +79,7 @@ public:
 	virtual void			CloseBox();
 
 	virtual SB_PROGRESS		CleanBox();
+	virtual SB_PROGRESS		SelectSnapshot(const QString& ID);
 
 	virtual QString			GetStatusStr() const;
 
@@ -124,6 +138,7 @@ public:
 	};
 
 	EBoxTypes				GetType() const { return m_BoxType; }
+	bool					IsAutoDelete() const { return m_BoxDel; }
 	QRgb					GetColor() const { return m_BoxColor; }
 	
 	class COptionsWindow*	m_pOptionsWnd;
@@ -165,6 +180,9 @@ protected:
 	void					AddJobToQueue(CBoxJob* pJob);
 	void					StartNextJob();
 
+	static void				ExportBoxAsync(const CSbieProgressPtr& pProgress, const QString& ExportPath, const QString& RootPath, const QString& Section);
+	static void				ImportBoxAsync(const CSbieProgressPtr& pProgress, const QString& ImportPath, const QString& RootPath, const QString& BoxName);
+
 	QList<QSharedPointer<CBoxJob>> m_JobQueue;
 
 	bool					m_bLogApiFound;
@@ -189,5 +207,6 @@ protected:
 	QMap<QString, SLink>	m_StartMenu;
 
 	EBoxTypes				m_BoxType;
+	bool					m_BoxDel;
 	QRgb					m_BoxColor;
 };

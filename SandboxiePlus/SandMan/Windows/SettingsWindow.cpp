@@ -3,11 +3,14 @@
 #include "SandMan.h"
 #include "../MiscHelpers/Common/Settings.h"
 #include "../MiscHelpers/Common/Common.h"
+#include "../MiscHelpers/Common/OtherFunctions.h"
 #include "Helpers/WinAdmin.h"
 #include "../QSbieAPI/Sandboxie/SbieTemplates.h"
 #include "../QSbieAPI/SbieUtils.h"
 #include "OptionsWindow.h"
 #include "../OnlineUpdater.h"
+#include "../MiscHelpers/Archive/ArchiveFS.h"
+#include <QJsonDocument>
 
 
 #include <windows.h>
@@ -46,7 +49,7 @@ void FixTriStateBoxPallete(QWidget* pWidget)
 	if (QApplication::style()->objectName() == "windows") {
 
 		//
-		// the built in "windows" theme of Qt does not properly renderd PartiallyChecked
+		// the built in "windows" theme of Qt does not properly rendered PartiallyChecked
 		// checkboxes, to remedi this issue we connect to the stateChanged slot
 		// and change the pattern to improve the rendering.
 		//
@@ -138,13 +141,18 @@ CSettingsWindow::CSettingsWindow(QWidget* parent)
 
 	ui.tabs->setTabIcon(0, CSandMan::GetIcon("Config"));
 	ui.tabs->setTabIcon(1, CSandMan::GetIcon("Shell"));
-	ui.tabs->setTabIcon(2, CSandMan::GetIcon("GUI"));
+	ui.tabs->setTabIcon(2, CSandMan::GetIcon("Design"));
 	ui.tabs->setTabIcon(3, CSandMan::GetIcon("Advanced"));
 	ui.tabs->setTabIcon(4, CSandMan::GetIcon("Alarm"));
-	ui.tabs->setTabIcon(5, CSandMan::GetIcon("Lock"));
-	ui.tabs->setTabIcon(6, CSandMan::GetIcon("Compatibility"));
-	ui.tabs->setTabIcon(7, CSandMan::GetIcon("EditIni"));
-	ui.tabs->setTabIcon(8, CSandMan::GetIcon("Support"));
+	ui.tabs->setTabIcon(5, CSandMan::GetIcon("Compatibility"));
+	ui.tabs->setTabIcon(6, CSandMan::GetIcon("Editor"));
+	ui.tabs->setTabIcon(7, CSandMan::GetIcon("Support"));
+
+	ui.tabsGUI->setTabIcon(0, CSandMan::GetIcon("GUI"));
+	ui.tabsGUI->setTabIcon(1, CSandMan::GetIcon("Run"));
+
+	ui.tabsAdvanced->setTabIcon(0, CSandMan::GetIcon("Options"));
+	ui.tabsAdvanced->setTabIcon(1, CSandMan::GetIcon("EditIni"));
 
 	int size = 16.0;
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
@@ -167,23 +175,7 @@ CSettingsWindow::CSettingsWindow(QWidget* parent)
 
 	AddIconToLabel(ui.lblUpdates, CSandMan::GetIcon("Update").pixmap(size,size));
 
-
 	int iViewMode = theConf->GetInt("Options/ViewMode", 1);
-	int iOptionLayout = theConf->GetInt("Options/NewConfigLayout", 2);
-	if (iOptionLayout == 2)
-		iOptionLayout = 1; // iViewMode != 2 ? 1 : 0;
-
-	// re structure the UI a bit
-	if (iOptionLayout == 1)
-	{
-		QWidget* pWidget = new QWidget(this);
-		QGridLayout* pLayout = new QGridLayout(pWidget);
-		QTabWidget* pTabs = new QTabWidget();
-		pLayout->addWidget(pTabs, 0, 0);
-		ui.tabs->insertTab(3, pWidget, CSandMan::GetIcon("Advanced"), tr("Advanced Config"));
-		pTabs->addTab(ui.tabAdvanced, CSandMan::GetIcon("Options"), tr("Sandbox Config"));
-		pTabs->addTab(ui.tabLock, CSandMan::GetIcon("Lock"), tr("Config Protection"));
-	}
 
 	/*if (iViewMode == 0)
 	{
@@ -195,17 +187,27 @@ CSettingsWindow::CSettingsWindow(QWidget* parent)
 
 	ui.tabs->setCurrentIndex(0);
 
-	ui.uiLang->addItem(tr("Auto Detection"), "");
-	ui.uiLang->addItem(tr("No Translation"), "native");
-	QDir langDir(QApplication::applicationDirPath() + "/translations/");
-	foreach(const QString & langFile, langDir.entryList(QStringList("sandman_*.qm"), QDir::Files))
 	{
-		QString Code = langFile.mid(8, langFile.length() - 8 - 3);
-		QLocale Locale(Code);
-		QString Lang = Locale.nativeLanguageName();
-		ui.uiLang->addItem(Lang, Code);
+		ui.uiLang->addItem(tr("Auto Detection"), "");
+		ui.uiLang->addItem(tr("No Translation"), "native");
+
+		C7zFileEngineHandler LangFS(QApplication::applicationDirPath() + "/translations.7z", "lang", this);
+
+		QString langDir;
+		if (LangFS.IsOpen())
+			langDir = LangFS.Prefix() + "/";
+		else
+			langDir = QApplication::applicationDirPath() + "/translations/";
+
+		foreach(const QString & langFile, QDir(langDir).entryList(QStringList("sandman_*.qm"), QDir::Files))
+		{
+			QString Code = langFile.mid(8, langFile.length() - 8 - 3);
+			QLocale Locale(Code);
+			QString Lang = Locale.nativeLanguageName();
+			ui.uiLang->addItem(Lang, Code);
+		}
+		ui.uiLang->setCurrentIndex(ui.uiLang->findData(theConf->GetString("Options/UiLanguage")));
 	}
-	ui.uiLang->setCurrentIndex(ui.uiLang->findData(theConf->GetString("Options/UiLanguage")));
 
 	ui.cmbIntegrateMenu->addItem(tr("Don't integrate links"));
 	ui.cmbIntegrateMenu->addItem(tr("As sub group"));
@@ -222,6 +224,16 @@ CSettingsWindow::CSettingsWindow(QWidget* parent)
 	ui.cmbDPI->addItem(tr("None"), 0);
 	ui.cmbDPI->addItem(tr("Native"), 1);
 	ui.cmbDPI->addItem(tr("Qt"), 2);
+
+	ui.cmbUpdate->addItem(tr("Ignore"), "ignore");
+	ui.cmbUpdate->addItem(tr("Notify"), "notify");
+	ui.cmbUpdate->addItem(tr("Download & Notify"), "download");
+	ui.cmbUpdate->addItem(tr("Download & Install"), "install");
+	
+	//ui.cmbRelease->addItem(tr("Ignore"), "ignore");
+	ui.cmbRelease->addItem(tr("Notify"), "notify");
+	ui.cmbRelease->addItem(tr("Download & Notify"), "download");
+	ui.cmbRelease->addItem(tr("Download & Install"), "install");
 
 	int FontScales[] = { 75,100,125,150,175,200,225,250,275,300,350,400, 0 };
 	for (int* pFontScales = FontScales; *pFontScales != 0; pFontScales++)
@@ -260,6 +272,16 @@ CSettingsWindow::CSettingsWindow(QWidget* parent)
 	connect(ui.cmbSysTray, SIGNAL(currentIndexChanged(int)), this, SLOT(OnChange()));
 	connect(ui.cmbTrayBoxes, SIGNAL(currentIndexChanged(int)), this, SLOT(OnChange()));
 	connect(ui.chkCompactTray, SIGNAL(stateChanged(int)), this, SLOT(OnChangeGUI()));
+
+
+	connect(ui.btnAddCmd, SIGNAL(clicked(bool)), this, SLOT(OnAddCommand()));
+	QMenu* pRunBtnMenu = new QMenu(ui.btnAddCmd);
+	pRunBtnMenu->addAction(tr("Browse for Program"), this, SLOT(OnBrowsePath()));
+	ui.btnAddCmd->setPopupMode(QToolButton::MenuButtonPopup);
+	ui.btnAddCmd->setMenu(pRunBtnMenu);
+	connect(ui.btnDelCmd, SIGNAL(clicked(bool)), this, SLOT(OnDelCommand()));
+	connect(ui.treeRun, SIGNAL(itemChanged(QTreeWidgetItem *, int)), this, SLOT(OnRunChanged()));
+
 
 	m_FeaturesChanged = false;
 	connect(ui.chkWFP, SIGNAL(stateChanged(int)), this, SLOT(OnFeaturesChanged()));
@@ -314,8 +336,15 @@ CSettingsWindow::CSettingsWindow(QWidget* parent)
 	);
 
 	connect(ui.lblCurrent, SIGNAL(linkActivated(const QString&)), this, SLOT(OnUpdate(const QString&)));
-	connect(ui.lblRelease, SIGNAL(linkActivated(const QString&)), this, SLOT(OnUpdate(const QString&)));
+	connect(ui.lblStable, SIGNAL(linkActivated(const QString&)), this, SLOT(OnUpdate(const QString&)));
 	connect(ui.lblPreview, SIGNAL(linkActivated(const QString&)), this, SLOT(OnUpdate(const QString&)));
+	//connect(ui.lblLive, SIGNAL(linkActivated(const QString&)), this, SLOT(OnUpdate(const QString&)));
+
+	connect(ui.chkAutoUpdate, SIGNAL(toggled(bool)), this, SLOT(UpdateUpdater()));
+
+	connect(ui.radStable, SIGNAL(toggled(bool)), this, SLOT(UpdateUpdater()));
+	connect(ui.radPreview, SIGNAL(toggled(bool)), this, SLOT(UpdateUpdater()));
+	//connect(ui.radLive, SIGNAL(toggled(bool)), this, SLOT(UpdateUpdater()));
 
 	connect(ui.tabs, SIGNAL(currentChanged(int)), this, SLOT(OnTab()));
 
@@ -377,7 +406,7 @@ void CSettingsWindow::showTab(int Tab, bool bExclusive)
 	case eOptions: pWidget = ui.tabGeneral; break;
 	case eShell: pWidget = ui.tabShell; break;
 	case eGuiConfig: pWidget = ui.tabGUI; break;
-	case eAdvanced: pWidget = ui.tabAdvanced; break;
+	case eAdvanced: pWidget = ui.tabSandbox; break;
 	case eProgCtrl: pWidget = ui.tabAlerts; break;
 	case eConfigLock: pWidget = ui.tabLock; break;
 	case eSoftCompat: pWidget = ui.tabCompat; break;
@@ -428,6 +457,50 @@ bool CSettingsWindow::eventFilter(QObject *source, QEvent *event)
 	}
 
 	return QDialog::eventFilter(source, event);
+}
+
+void CSettingsWindow::OnBrowsePath()
+{
+	QString Value = QFileDialog::getOpenFileName(this, tr("Select Program"), "", tr("Executables (*.exe *.cmd)")).replace("/", "\\");
+	if (Value.isEmpty())
+		return;
+
+	QString Name = QInputDialog::getText(this, "Sandboxie-Plus", tr("Please enter a menu title"), QLineEdit::Normal);
+	if (Name.isEmpty())
+		return;
+
+	AddRunItem(Name, Value);
+}
+
+void CSettingsWindow::OnAddCommand()
+{
+	QString Value = QInputDialog::getText(this, "Sandboxie-Plus", tr("Please enter a command"), QLineEdit::Normal);
+	if (Value.isEmpty())
+		return;
+
+	QString Name = QInputDialog::getText(this, "Sandboxie-Plus", tr("Please enter a menu title"), QLineEdit::Normal);
+	if (Name.isEmpty())
+		return;
+
+	AddRunItem(Name, Value);
+}
+
+void CSettingsWindow::AddRunItem(const QString& Name, const QString& Command)
+{
+	QTreeWidgetItem* pItem = new QTreeWidgetItem();
+	pItem->setText(0, Name);
+	pItem->setText(1, Command);
+	pItem->setFlags(pItem->flags() | Qt::ItemIsEditable);
+	ui.treeRun->addTopLevelItem(pItem);
+}
+
+void CSettingsWindow::OnDelCommand()
+{
+	QTreeWidgetItem* pItem = ui.treeRun->currentItem();
+	if (!pItem)
+		return;
+
+	delete pItem;
 }
 
 Qt::CheckState CSettingsWindow__IsContextMenu()
@@ -527,6 +600,7 @@ void CSettingsWindow::LoadSettings()
 	//ui.cmbFontScale->setCurrentIndex(ui.cmbFontScale->findData(theConf->GetInt("Options/FontScaling", 100)));
 	ui.cmbFontScale->setCurrentText(QString::number(theConf->GetInt("Options/FontScaling", 100)));
 
+	ui.chkSilentMode->setChecked(theConf->GetBool("Options/CheckSilentMode", true));
 	ui.chkNotifications->setChecked(theConf->GetBool("Options/ShowNotifications", true));
 
 	ui.chkSandboxUrls->setCheckState(CSettingsWindow__Int2Chk(theConf->GetInt("Options/OpenUrlsSandboxed", 2)));
@@ -554,6 +628,22 @@ void CSettingsWindow::LoadSettings()
 
 	if (theAPI->IsConnected())
 	{
+		ui.treeRun->clear();
+		foreach(const QString& Value, theAPI->GetGlobalSettings()->GetTextList("RunCommand", false))
+		{
+			StrPair NameCmd = Split2(Value, "|");
+			QTreeWidgetItem* pItem = new QTreeWidgetItem();
+			AddRunItem(NameCmd.first, NameCmd.second);
+		}
+		
+		ui.cmbDefault->clear();
+		foreach(const CSandBoxPtr & pBox, theAPI->GetAllBoxes())
+			ui.cmbDefault->addItem(pBox->GetName().replace("_", " "), pBox->GetName());
+		int pos = ui.cmbDefault->findData(theAPI->GetGlobalSettings()->GetText("DefaultBox", "DefaultBox"));
+		if(pos == -1)
+			pos = ui.cmbDefault->findData("DefaultBox");
+		ui.cmbDefault->setCurrentIndex(pos);
+
 		QString FileRootPath_Default = "\\??\\%SystemDrive%\\Sandbox\\%USER%\\%SANDBOX%";
 		QString KeyRootPath_Default  = "\\REGISTRY\\USER\\Sandbox_%USER%_%SANDBOX%";
 		QString IpcRootPath_Default  = "\\Sandbox\\%USER%\\%SANDBOX%\\Session_%SESSION%";
@@ -575,7 +665,7 @@ void CSettingsWindow::LoadSettings()
 		ui.chkClearPass->setChecked(theAPI->GetGlobalSettings()->GetBool("ForgetPassword", false));
 
 		ui.chkStartBlock->setChecked(theAPI->GetGlobalSettings()->GetBool("StartRunAlertDenied", false));
-		ui.chkStartBlockMsg->setChecked(theAPI->GetGlobalSettings()->GetBool("NotifyStartRunAccessDenied", true));
+		ui.chkStartBlockMsg->setChecked(theAPI->GetGlobalSettings()->GetBool("AlertStartRunAccessDenied", true));
 		ui.chkNotForcedMsg->setChecked(theAPI->GetGlobalSettings()->GetBool("NotifyForceProcessDisabled", false));
 		
 		
@@ -590,6 +680,7 @@ void CSettingsWindow::LoadSettings()
 	
 	if(!theAPI->IsConnected() || (theAPI->GetGlobalSettings()->GetBool("EditAdminOnly", false) && !IsAdminUser()))
 	{
+		ui.cmbDefault->setEnabled(false);
 		ui.fileRoot->setEnabled(false);
 		ui.chkSeparateUserFolders->setEnabled(false);
 		ui.chkAutoRoot->setEnabled(false);
@@ -622,13 +713,19 @@ void CSettingsWindow::LoadSettings()
 	UpdateCert();
 
 	ui.chkAutoUpdate->setCheckState(CSettingsWindow__Int2Chk(theConf->GetInt("Options/CheckForUpdates", 2)));
-	ui.chkAutoDownload->setCheckState(CSettingsWindow__Int2Chk(theConf->GetInt("Options/DownloadUpdates", 0)));
+	//ui.chkAutoDownload->setCheckState(CSettingsWindow__Int2Chk(theConf->GetInt("Options/DownloadUpdates", 0)));
 	//ui.chkAutoInstall->setCheckState(CSettingsWindow__Int2Chk(theConf->GetInt("Options/InstallUpdates", 0)));
-	ui.chkAutoInstall->setVisible(false); // todo implement smart auto updater
 
-	int UpdateChannel = theConf->GetInt("Options/UpdateChannel", 0);
-	ui.radRelease->setChecked(UpdateChannel == 0);
-	ui.radPreview->setChecked(UpdateChannel == 1);
+	QString ReleaseChannel = theConf->GetString("Options/ReleaseChannel", "stable");
+	ui.radStable->setChecked(ReleaseChannel == "stable");
+	ui.radPreview->setChecked(ReleaseChannel == "preview");
+	//ui.radLive->setChecked(ReleaseChannel == "live");
+
+	UpdateUpdater();
+
+	ui.cmbUpdate->setCurrentIndex(ui.cmbUpdate->findData(theConf->GetString("Options/OnNewUpdate", "ignore")));
+	ui.cmbRelease->setCurrentIndex(ui.cmbRelease->findData(theConf->GetString("Options/OnNewRelease", "download")));
+
 
 	ui.chkNoCheck->setChecked(theConf->GetBool("Options/NoSupportCheck", false));
 	if(ui.chkNoCheck->isCheckable() && !g_CertInfo.expired)
@@ -671,6 +768,32 @@ void CSettingsWindow::UpdateCert()
 			palette.setColor(QPalette::Base, QColor(192, 255, 192));
 		}
 		ui.txtCertificate->setPalette(palette);
+	}
+}
+
+void CSettingsWindow::UpdateUpdater()
+{
+	//ui.radLive->setEnabled(false);
+	if (!ui.chkAutoUpdate->isChecked()) {
+		ui.cmbUpdate->setEnabled(false);
+		ui.cmbRelease->setEnabled(false);
+		ui.lblRevision->setText(QString());
+	}
+	else {
+		if (ui.radStable->isChecked() && (!g_CertInfo.valid
+#ifdef _DEBUG
+			|| (GetKeyState(VK_CONTROL) & 0x8000) != 0
+#endif
+			)) {
+			ui.cmbUpdate->setEnabled(false);
+			ui.cmbUpdate->setCurrentIndex(ui.cmbUpdate->findData("ignore"));
+			ui.lblRevision->setText(tr("Supporter certificate required"));
+		} 
+		else {
+			ui.cmbUpdate->setEnabled(true);
+			ui.lblRevision->setText(QString());
+		}
+		ui.cmbRelease->setEnabled(true);
 	}
 }
 
@@ -775,6 +898,7 @@ void CSettingsWindow::SaveSettings()
 
 	theConf->SetValue("Options/RunInDefaultBox", ui.chkAlwaysDefault->isChecked());
 
+	theConf->SetValue("Options/CheckSilentMode", ui.chkSilentMode->isChecked());
 	theConf->SetValue("Options/ShowNotifications", ui.chkNotifications->isChecked());
 
 	theConf->SetValue("Options/OpenUrlsSandboxed", CSettingsWindow__Chk2Int(ui.chkSandboxUrls->checkState()));
@@ -812,6 +936,15 @@ void CSettingsWindow::SaveSettings()
 	{
 		try
 		{
+			QStringList RunCommands;
+			for (int i = 0; i < ui.treeRun->topLevelItemCount(); i++) {
+				QTreeWidgetItem* pItem = ui.treeRun->topLevelItem(i);
+				RunCommands.append(pItem->text(0) + "|" + pItem->text(1));
+			}
+			WriteTextList("RunCommand", RunCommands);
+
+			WriteText("DefaultBox", ui.cmbDefault->currentData().toString());
+
 			WriteText("FileRootPath", ui.fileRoot->text()); //ui.fileRoot->setText("\\??\\%SystemDrive%\\Sandbox\\%USER%\\%SANDBOX%");
 			WriteAdvancedCheck(ui.chkSeparateUserFolders, "SeparateUserFolders", "", "n");
 			WriteText("KeyRootPath", ui.regRoot->text()); //ui.regRoot->setText("\\REGISTRY\\USER\\Sandbox_%USER%_%SANDBOX%");
@@ -848,7 +981,7 @@ void CSettingsWindow::SaveSettings()
 			if (m_WarnProgsChanged)
 			{
 				WriteAdvancedCheck(ui.chkStartBlock, "StartRunAlertDenied", "y", "");
-				WriteAdvancedCheck(ui.chkStartBlockMsg, "NotifyStartRunAccessDenied", "", "n");
+				WriteAdvancedCheck(ui.chkStartBlockMsg, "AlertStartRunAccessDenied", "", "n");
 				WriteAdvancedCheck(ui.chkNotForcedMsg, "NotifyForceProcessDisabled", "y", "");
 
 				QStringList AlertProcess;
@@ -936,13 +1069,20 @@ void CSettingsWindow::SaveSettings()
 	}
 
 	theConf->SetValue("Options/CheckForUpdates", CSettingsWindow__Chk2Int(ui.chkAutoUpdate->checkState()));
-	theConf->SetValue("Options/DownloadUpdates", CSettingsWindow__Chk2Int(ui.chkAutoDownload->checkState()));
+	//theConf->SetValue("Options/DownloadUpdates", CSettingsWindow__Chk2Int(ui.chkAutoDownload->checkState()));
 	//theConf->SetValue("Options/InstallUpdates", CSettingsWindow__Chk2Int(ui.chkAutoInstall->checkState()));
 
-	int UpdateChannel = 0; // ui.radRelease->isChecked();
-	if (ui.radPreview->isChecked())
-		UpdateChannel = 1;
-	theConf->SetValue("Options/UpdateChannel", UpdateChannel);
+	QString ReleaseChannel;
+	if (ui.radStable->isChecked())
+		ReleaseChannel = "stable";
+	else if (ui.radPreview->isChecked())
+		ReleaseChannel = "preview";
+	//else if (ui.radLive->isChecked())
+	//	ReleaseChannel = "live";
+	if(!ReleaseChannel.isEmpty()) theConf->SetValue("Options/ReleaseChannel", ReleaseChannel);
+
+	theConf->SetValue("Options/OnNewUpdate", ui.cmbUpdate->currentData());
+	theConf->SetValue("Options/OnNewRelease", ui.cmbRelease->currentData());
 
 	theConf->SetValue("Options/NoSupportCheck", ui.chkNoCheck->isChecked());
 
@@ -1276,7 +1416,17 @@ void CSettingsWindow::GetUpdates()
 {
 	QVariantMap Params;
 	Params["channel"] = "all";
-	COnlineUpdater::Instance()->GetUpdates(this, SLOT(OnUpdateData(const QVariantMap&, const QVariantMap&)), Params);
+	theGUI->m_pUpdater->GetUpdates(this, SLOT(OnUpdateData(const QVariantMap&, const QVariantMap&)), Params);
+}
+
+QString CSettingsWindow__MkVersion(const QString& Name, const QVariantMap& Releases)
+{
+	QVariantMap Release = Releases[Name].toMap();
+	QString Version = Release.value("version").toString();
+	//if (Release["build"].type() != QVariant::Invalid) 
+	int iUpdate = Release["update"].toInt();
+	if(iUpdate) Version += QChar('a' + (iUpdate - 1));
+	return QString("<a href=\"%1\">%2</a>").arg(Name, Version);
 }
 
 void CSettingsWindow::OnUpdateData(const QVariantMap& Data, const QVariantMap& Params)
@@ -1284,40 +1434,49 @@ void CSettingsWindow::OnUpdateData(const QVariantMap& Data, const QVariantMap& P
 	if (Data.isEmpty() || Data["error"].toBool())
 		return;
 
+	QString Version = QString::number(VERSION_MJR) + "." + QString::number(VERSION_MIN) + "." + QString::number(VERSION_REV);
+	int iUpdate = COnlineUpdater::GetCurrentUpdate();
+	if(iUpdate) 
+		Version += QChar('a' + (iUpdate - 1));
+
 	m_UpdateData = Data;
-	QVariantList Channels = m_UpdateData["channels"].toList();
-	ui.lblCurrent->setText(tr("%1 (Current)").arg(theGUI->GetVersion()));
-	if(Channels.length() > 0) ui.lblRelease->setText(tr("<a href=\"0\">%1</a>").arg(Channels[0].toMap().value("version").toString()));
-	if(Channels.length() > 1) ui.lblPreview->setText(tr("<a href=\"1\">%1</a>").arg(Channels[1].toMap().value("version").toString()));
+	QVariantMap Releases = m_UpdateData["releases"].toMap();
+	ui.lblCurrent->setText(tr("%1 (Current)").arg(Version));
+	ui.lblStable->setText(CSettingsWindow__MkVersion("stable", Releases));
+	ui.lblPreview->setText(CSettingsWindow__MkVersion("preview", Releases));
+	//ui.lblLive->setText(CSettingsWindow__MkVersion("live", Releases));
 }
 
 void CSettingsWindow::OnUpdate(const QString& Channel)
 {
-	if (Channel == "check")
+	if (Channel == "check") {
 		GetUpdates();
-	else
+		return;
+	}
+	
+	QVariantMap Releases = m_UpdateData["releases"].toMap();
+	QVariantMap Release = Releases[Channel].toMap();
+
+	QString VersionStr = Release["version"].toString();
+	if (VersionStr.isEmpty())
+		return;
+
+	QVariantMap Installer = Releases["installer"].toMap();
+	QString DownloadUrl = Installer["downloadUrl"].toString();
+	//QString DownloadSig = Installer["signature"].toString();
+	// todo xxx
+	//if (!DownloadUrl.isEmpty() /*&& !DownloadSig.isEmpty()*/)
+	//{
+	//	// todo: signature
+	//	if (QMessageBox("Sandboxie-Plus", tr("Do you want to download the installer for v%1?").arg(VersionStr), QMessageBox::Question, QMessageBox::Yes | QMessageBox::Default, QMessageBox::No | QMessageBox::Escape, QMessageBox::NoButton, this).exec() == QMessageBox::Yes)
+	//		COnlineUpdater::Instance()->DownloadInstaller(DownloadUrl, true);
+	//}
+	//else
 	{
-		QVariantList Channels = m_UpdateData["channels"].toList();
-		QVariantMap Data = Channels[Channel.toInt()].toMap();
-
-		QString VersionStr = Data["version"].toString();
-		if (VersionStr.isEmpty())
-			return;
-
-		QString DownloadUrl = Data["downloadUrl"].toString();
-		//	'sha256'
-		//	'signature'
-
-		if (!DownloadUrl.isEmpty())
-		{
-			if (QMessageBox("Sandboxie-Plus", tr("Do you want to download the version %1?").arg(VersionStr), QMessageBox::Question, QMessageBox::Yes | QMessageBox::Default, QMessageBox::No | QMessageBox::Escape, QMessageBox::NoButton, this).exec() == QMessageBox::Yes)
-				COnlineUpdater::Instance()->DownloadUpdates(DownloadUrl, true);
-		}
-		else
-		{
-			QString UpdateUrl = Data["updateUrl"].toString();
-			QDesktopServices::openUrl(UpdateUrl);
-		}
+		QString InfoUrl = Release["infoUrl"].toString();
+		if (InfoUrl.isEmpty())
+			InfoUrl = "https://sandboxie-plus.com/go.php?to=sbie-get";
+		QDesktopServices::openUrl(InfoUrl);
 	}
 }
 

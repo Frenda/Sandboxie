@@ -471,21 +471,17 @@ _FX ULONG SbieDll_MatchPath2(WCHAR path_code, const WCHAR *path, BOOLEAN bCheckO
     BOOLEAN use_rule_specificity = (path_code == L'f' || path_code == L'k' || path_code == L'i') && (Dll_ProcessFlags & SBIE_FLAG_RULE_SPECIFICITY) != 0;
 
     //
-    // set default behavioure 
+    // set default behaviour
     //
 
     level = 3; // 3 - global default - lower is better, 3 is max value
     exact = FALSE;
     wildc = -1; // lower is better
     match_len = 0;
-    if ((path_code == L'f' || path_code == L'k' || path_code == L'i') && (Dll_ProcessFlags & SBIE_FLAG_PRIVACY_MODE) != 0) {
-
-        mp_flags = PATH_WRITE_FLAG; // write path mode
-    }
-    else {
-
-        mp_flags = 0; // normal mode
-    }
+    //if (use_privacy_mode)
+    //    mp_flags = PATH_WRITE_FLAG; // write path mode
+    //else 
+    //    mp_flags = 0; // normal mode
 
     //
     // ClosedXxxPath
@@ -520,7 +516,7 @@ _FX ULONG SbieDll_MatchPath2(WCHAR path_code, const WCHAR *path, BOOLEAN bCheckO
     
     if (Pattern_MatchPathListEx(path_lwr, path_len, normal_list, &level, &match_len, &exact, &wildc, NULL)) { //patsrc)) {
         mp_flags = 0;
-        // dont goto finish as open can overwrite this 
+        // don't goto finish as open can overwrite this 
     }
 
     //

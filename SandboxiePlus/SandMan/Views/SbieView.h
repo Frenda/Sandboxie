@@ -12,6 +12,8 @@ public:
 	CSbieView(QWidget* parent = 0);
 	virtual ~CSbieView();
 
+	virtual void				SaveState();
+
 	virtual QTreeViewEx*		GetTree() { return m_pSbieTree; }
 
 	virtual QList<CSandBoxPtr>	GetSelectedBoxes();
@@ -49,6 +51,7 @@ private slots:
 	void						OnCustomSortByColumn(int column);
 
 	void						OnDoubleClicked(const QModelIndex& index);
+	void						OnClicked(const QModelIndex& index);
 	void						ProcessSelection(const QItemSelection& selected, const QItemSelection& deselected);
 
 	void						OnGroupAction();
@@ -132,7 +135,9 @@ private:
 	QAction*				m_pMenuAutoRun;
 	QAction*				m_pMenuRunCmd;
 	QAction*				m_pMenuRunCmdAdmin;
+#ifdef _WIN64
 	QAction*				m_pMenuRunCmd32;
+#endif
 	QAction*				m_pMenuMkLink;
 	QMenu*					m_pMenuPresets;
 	QActionGroup*			m_pMenuPresetsAdmin;
@@ -155,6 +160,7 @@ private:
 	QAction*				m_pMenuRemove;
 	QMenu*					m_pMenuTools;
 	QAction*				m_pMenuDuplicate;
+	QAction*				m_pMenuExport;
 	QAction*				m_pMenuMoveUp;
 	//QAction*				m_pMenuMoveBy;
 	QAction*				m_pMenuMoveDown;

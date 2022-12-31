@@ -46,6 +46,8 @@ private slots:
 
 	void OnOptChanged();
 
+	void OnUseIcon(bool bUse);
+	bool OnPickIcon();
 	void OnPickColor();
 	void OnColorSlider(int value);
 
@@ -76,7 +78,7 @@ private slots:
 	void OnBreakoutBrowse();
 	void OnBreakoutDir();
 	void OnDelBreakout();
-	void OnShowBreakoutTmpl()		{ LoadForcedTmpl(true); }
+	void OnShowBreakoutTmpl()		{ LoadBreakoutTmpl(true); }
 
 	void OnAddLingering();
 	void OnDelStopProg();
@@ -109,14 +111,6 @@ private slots:
 
 	void OnTestNetFwRule();
 	void OnClearNetFwTest();
-
-	void OnAddDnsFilter();
-	void OnDelDnsFilter();
-	void OnDnsFilterChanged(QTreeWidgetItem * pItem, int Column) { m_DnsFilterChanged = true; OnOptChanged(); }
-
-	void OnAddNetProxy();
-	void OnDelNetProxy();
-	void OnNetProxyChanged(QTreeWidgetItem * pItem, int Column) { m_NetProxyChanged = true; OnOptChanged(); }
 	//
 	
 	// access
@@ -201,6 +195,7 @@ private slots:
 
 	void OnGeneralChanged();
 	void OnPSTChanged();
+	void OnActionChanged();
 	void OnSecurityMode();
 	void OnStartChanged()			{ m_StartChanged = true; OnOptChanged(); }
 	//void OnRestrictionChanged()		{ m_RestrictionChanged = true; OnOptChanged(); }
@@ -309,6 +304,8 @@ protected:
 	void SetBoxColor(const QColor& color);
 	void UpdateBoxColor();
 
+	QString GetActionFile();
+
 	void SetProgramItem(QString Program, QTreeWidgetItem* pItem, int Column, const QString& Sufix = QString());
 
 	QString SelectProgram(bool bOrGroup = true);
@@ -316,12 +313,10 @@ protected:
 	bool DelProgramFromGroup(const QString& Program, const QString& Group);
 	QTreeWidgetItem* FindGroupByName(const QString& Group, bool bAdd = false);
 
-	void CopyGroupToList(const QString& Groupe, QTreeWidget* pTree, bool disabled = false);
+	void CopyGroupToList(const QString& Group, QTreeWidget* pTree, bool disabled = false);
 	QTreeWidgetItem* GetAccessEntry(EAccessType Type, const QString& Program, EAccessMode Mode, const QString& Path);
 	void SetAccessEntry(EAccessType Type, const QString& Program, EAccessMode Mode, const QString& Path);
 	void DelAccessEntry(EAccessType Type, const QString& Program, EAccessMode Mode, const QString& Path);
-	void AddProgToGroup(QTreeWidget* pTree, const QString& Groupe, bool disabled = false);
-	void DelProgFromGroup(QTreeWidget* pTree, const QString& Groupe);
 
 	void LoadConfig();
 	void SaveConfig();
@@ -381,16 +376,6 @@ protected:
 	void LoadNetFwRules();
 	void SaveNetFwRules();
 	void LoadNetFwRulesTmpl(bool bUpdate = false);
-
-	void LoadDnsFilter();
-	void AddDnsFilter(const QString& Value, bool disabled = false, const QString& Template = QString());
-	void AddDnsFilter(const QString& Prog, const QString& Domain, const QStringList& IPs = QStringList(), bool disabled = false, const QString& Template = QString());
-	void SaveDnsFilter();
-
-	void LoadNetProxy();
-	void AddNetProxy(const QString& Value, bool disabled = false, const QString& Template = QString());
-	void AddNetProxy(const QString& Prog, const QString& Proxy, bool disabled = false, const QString& Template = QString());
-	void SaveNetProxy();
 	//
 	
 	// access
@@ -402,6 +387,7 @@ protected:
 	void LoadAccessListTmpl(EAccessType Type, bool bChecked, bool bUpdate = false);
 	QString	GetAccessTypeStr(EAccessType Type);
 	QString	GetAccessModeStr(EAccessMode Mode);
+	QString	GetAccessModeTip(EAccessMode Mode);
 	void ParseAndAddAccessEntry(EAccessEntry EntryType, const QString& Value, bool disabled = false, const QString& Template = QString());
 	void ParseAndAddAccessEntry(EAccessType Type, EAccessMode Mode, const QString& Value, bool disabled = false, const QString& Template = QString());
 	void AddAccessEntry(EAccessType Type, EAccessMode Mode, QString Program, const QString& Path, bool disabled = false, const QString& Template = QString());
@@ -470,6 +456,7 @@ protected:
 
 	bool m_ConfigDirty;
 	QColor m_BorderColor;
+	QString m_BoxIcon;
 
 	bool m_HoldBoxType;
 
@@ -481,8 +468,6 @@ protected:
 	//bool m_RestrictionChanged;
 	bool m_INetBlockChanged;
 	bool m_NetFwRulesChanged;
-	bool m_DnsFilterChanged;
-	bool m_NetProxyChanged;
 	bool m_AccessChanged;
 	bool m_TemplatesChanged;
 	bool m_FoldersChanged;
@@ -531,6 +516,8 @@ private:
 	void WriteTextList(const QString& Setting, const QStringList& List);
 
 	Ui::OptionsWindow ui;
+	QCheckBox* m_pUseIcon;
+	QToolButton* m_pPickIcon;
 	QSlider* m_pColorSlider;
 
 	struct SDbgOpt {

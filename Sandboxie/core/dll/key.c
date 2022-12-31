@@ -249,11 +249,11 @@ static NTSTATUS Key_NtRenameKey(
     HANDLE KeyHandle, UNICODE_STRING *ReplacementName);
 
 
-//static NTSTATUS Key_NtSaveKey(
-//    HANDLE KeyHandle, HANDLE FileHandle);
-//
-//static NTSTATUS Key_NtSaveKeyEx(
-//    HANDLE KeyHandle, HANDLE FileHandle, ULONG Flags);
+static NTSTATUS Key_NtSaveKey(
+    HANDLE KeyHandle, HANDLE FileHandle);
+
+static NTSTATUS Key_NtSaveKeyEx(
+    HANDLE KeyHandle, HANDLE FileHandle, ULONG Flags);
 
 static NTSTATUS Key_NtLoadKey(
     OBJECT_ATTRIBUTES *TargetObjectAttributes,
@@ -266,7 +266,7 @@ static NTSTATUS Key_NtLoadKey2(
 static NTSTATUS Key_NtLoadKey3(
     OBJECT_ATTRIBUTES *TargetObjectAttributes,
     OBJECT_ATTRIBUTES *SourceObjectAttributes, ULONG Flags,
-    PVOID LoadArguments, ULONG LoadArgumentCount, ACCESS_MASK DesiredAccess, HANDLE KeyHandle, ULONG Unkown);
+    PVOID LoadArguments, ULONG LoadArgumentCount, ACCESS_MASK DesiredAccess, HANDLE KeyHandle, ULONG Unknown);
 
 static NTSTATUS Key_NtLoadKeyEx(
     OBJECT_ATTRIBUTES *TargetObjectAttributes,
@@ -294,8 +294,8 @@ static P_NtNotifyChangeKey          __sys_NtNotifyChangeKey         = NULL;
 static P_NtNotifyChangeMultipleKeys __sys_NtNotifyChangeMultipleKeys= NULL;
 static P_NtRenameKey                __sys_NtRenameKey               = NULL;
 
-//static P_NtSaveKey                  __sys_NtSaveKey                 = NULL;
-//static P_NtSaveKeyEx                __sys_NtSaveKeyEx               = NULL;
+static P_NtSaveKey                  __sys_NtSaveKey                 = NULL;
+static P_NtSaveKeyEx                __sys_NtSaveKeyEx               = NULL;
 static P_NtLoadKey                  __sys_NtLoadKey                 = NULL;
 static P_NtLoadKey2                 __sys_NtLoadKey2                = NULL;
 static P_NtLoadKey3                 __sys_NtLoadKey3                = NULL;
@@ -377,7 +377,7 @@ BOOLEAN Key_Delete_v2 = FALSE;
 
 _FX BOOLEAN Key_Init(void)
 {
-    HMODULE module = NULL;
+    HMODULE module = Dll_Ntdll;
 
     InitializeCriticalSection(&Key_Handles_CritSec);
 
@@ -419,40 +419,36 @@ _FX BOOLEAN Key_Init(void)
     SBIEDLL_HOOK(Key_,NtNotifyChangeMultipleKeys);
 
     void* NtRenameKey = GetProcAddress(Dll_Ntdll, "NtRenameKey");
-    if (NtRenameKey) {
+    if (NtRenameKey) { // Windows XP
         SBIEDLL_HOOK(Key_,NtRenameKey);
     }
 
     void* NtOpenKeyEx = GetProcAddress(Dll_Ntdll, "NtOpenKeyEx");
-    if (NtOpenKeyEx) {
+    if (NtOpenKeyEx) { // windows server 2008 R2
         SBIEDLL_HOOK(Key_, NtOpenKeyEx);
     }
 
     
-    //SBIEDLL_HOOK(Key_, NtSaveKey);
-    //
-    //void* NtSaveKeyEx = GetProcAddress(Dll_Ntdll, "NtSaveKeyEx");
-    //if (NtSaveKeyEx) {
-    //    SBIEDLL_HOOK(Key_,NtSaveKeyEx);
-    //}
+    SBIEDLL_HOOK(Key_, NtSaveKey);
+    
+    void* NtSaveKeyEx = GetProcAddress(Dll_Ntdll, "NtSaveKeyEx");
+    if (NtSaveKeyEx) { // Windows XP
+        SBIEDLL_HOOK(Key_,NtSaveKeyEx);
+    }
 
     SBIEDLL_HOOK(Key_, NtLoadKey);
+    SBIEDLL_HOOK(Key_, NtLoadKey2);
 
-    void* NtLoadKey2 = GetProcAddress(Dll_Ntdll, "NtLoadKey2");
-    if (NtLoadKey2) {
-        SBIEDLL_HOOK(Key_,NtLoadKey2);
-    }
     void* NtLoadKey3 = GetProcAddress(Dll_Ntdll, "NtLoadKey3");
-    if (NtLoadKey3) {
+    if (NtLoadKey3) { // Windows 10 2004
         SBIEDLL_HOOK(Key_,NtLoadKey3);
     }
+
     void* NtLoadKeyEx = GetProcAddress(Dll_Ntdll, "NtLoadKeyEx");
-    if (NtLoadKeyEx) {
+    if (NtLoadKeyEx) { // Windows Server 2003 
         SBIEDLL_HOOK(Key_,NtLoadKeyEx);
     }
     
-
-    Dll_OsBuild = GET_PEB_IMAGE_BUILD;
     return TRUE;
 }
 
@@ -508,7 +504,7 @@ _FX NTSTATUS Key_GetName(
             //
             // Note: some keys like L"\\REGISTRY\\MACHINE\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Perflib\\007"
             // do not return valid results when querying using NtQueryKey and returns a STATUS_INVALID_HANDLE
-            // using Obj_GetObjectName seams to break sbie on 1803, strangely on w7 its fine
+            // using Obj_GetObjectName seems to break SBIE on Windows 10 1803, strangely on W7 it is fine
             // hence this alternative access mode is made optional
             //
 
@@ -832,11 +828,13 @@ check_sandbox_prefix:
 _FX NTSTATUS Key_FixNameWow64(
     ACCESS_MASK DesiredAccess, WCHAR **OutTruePath, WCHAR **OutCopyPath)
 {
+#ifndef _WIN64
     NTSTATUS status;
     OBJECT_ATTRIBUTES objattrs;
     UNICODE_STRING objname;
     HANDLE handle;
     WCHAR *TruePath, *BackslashPtr, *NewPtr;
+#endif 
 
     //
     // WOW64 Registry Redirector.  in case that either of these is true:
@@ -848,8 +846,9 @@ _FX NTSTATUS Key_FixNameWow64(
     // and then reconstruct the output TruePath and CopyPath
     //
 
+#ifndef _WIN64
     if (! Dll_IsWow64) {        // caller is 64-bit process
-
+#endif
         if (! (DesiredAccess & KEY_WOW64_32KEY))
             return STATUS_SUCCESS;
 
@@ -860,6 +859,7 @@ _FX NTSTATUS Key_FixNameWow64(
         // NoSysCallHooks END
 
         return Key_FixNameWow64_2(OutTruePath, OutCopyPath);
+#ifndef _WIN64
     }
 
     if (DesiredAccess & KEY_WOW64_64KEY)
@@ -955,6 +955,7 @@ _FX NTSTATUS Key_FixNameWow64(
     }
 
     return status;
+#endif
 }
 
 
@@ -1392,8 +1393,10 @@ _FX NTSTATUS Key_NtCreateKeyImpl(
             if (!NT_SUCCESS(status))
                 __leave;
 
+#ifndef _WIN64
             if (Dll_IsWow64)
                 OriginalDesiredAccess = DesiredAccess;
+#endif
 
             DesiredAccess &= ~(KEY_WOW64_32KEY | KEY_WOW64_64KEY);
         }
@@ -1580,7 +1583,7 @@ _FX NTSTATUS Key_NtCreateKeyImpl(
             TruePath = OldTruePath;
         }
 
-        // if key marked as deleted dont even try opening true path
+        // if key marked as deleted don't even try opening true path
         if (KEY_PATH_DELETED(TruePathFlags) && CreateOptions == tzuk) { 
             status = STATUS_OBJECT_NAME_NOT_FOUND;
             __leave;
@@ -1649,8 +1652,8 @@ _FX NTSTATUS Key_NtCreateKeyImpl(
         // for write access, it would not be able to pass the WOW64 flag
         //
         // this special case makes IMHO no sense, wow registry redirection
-        // acts only on specific paths, and our sanboxed paths do not fall 
-        // into that category, hence thay dont need KEY_WOW64_xxKEY flags!
+        // acts only on specific paths, and our sandboxed paths do not fall 
+        // into that category, hence they do not need KEY_WOW64_xxKEY flags!
         //
 
         //if (OriginalDesiredAccess & (KEY_WOW64_32KEY | KEY_WOW64_64KEY))
@@ -1702,7 +1705,7 @@ SkipReadOnlyCheck:
 
     RtlInitUnicodeString(&objname, TruePath);
 
-    status = __sys_NtOpenKey(KeyHandle, Wow64KeyReadAccess, &objattrs);
+    status = SbieApi_OpenKey(KeyHandle, TruePath);
 
     *BackslashPtr = L'\\';
 
@@ -2864,6 +2867,7 @@ _FX NTSTATUS Key_NtQueryKeyImpl(
         KeyInformationClass != KeyCachedInformation)
     {
         status = STATUS_INVALID_PARAMETER;
+        SbieApi_Log(2205, L"NtQueryKeyImpl KeyInfo: %d", KeyInformationClass);
         __leave;
     }
 
@@ -3041,6 +3045,7 @@ _FX NTSTATUS Key_NtEnumerateKey(
         KeyInformationClass != KeyNodeInformation &&
         KeyInformationClass != KeyFullInformation)
     {
+        SbieApi_Log(2205, L"NtEnumerateKey KeyInfo: %d", KeyInformationClass);
         status = STATUS_INVALID_PARAMETER;
         __leave;
     }
@@ -4450,7 +4455,7 @@ _FX NTSTATUS Key_NtRenameKey(
         goto finish;
 
     //
-    // rename the key ensuring we wil have a boxed copy
+    // rename the key ensuring we will have a boxed copy
     // try renaming if it fails with access denided try again with a new handle
     //
 
@@ -4539,12 +4544,13 @@ finish:
 //---------------------------------------------------------------------------
 
 
-//_FX NTSTATUS Key_NtSaveKey(
-//    HANDLE KeyHandle, HANDLE FileHandle)
-//{
-//    SbieApi_Log(2205, L"NtSaveKey");
-//    return STATUS_SUCCESS;
-//}
+_FX NTSTATUS Key_NtSaveKey(
+    HANDLE KeyHandle, HANDLE FileHandle)
+{
+    // todo: copy all reg keys from host to box for the used KeyHandle such that all will be saved
+    SbieApi_Log(2205, L"NtSaveKey");
+    return __sys_NtSaveKey(KeyHandle, FileHandle);
+}
 
 
 //---------------------------------------------------------------------------
@@ -4552,12 +4558,13 @@ finish:
 //---------------------------------------------------------------------------
 
 
-//_FX NTSTATUS Key_NtSaveKeyEx(
-//    HANDLE KeyHandle, HANDLE FileHandle, ULONG Flags)
-//{
-//    SbieApi_Log(2205, L"NtSaveKeyEx");
-//    return STATUS_SUCCESS;
-//}
+_FX NTSTATUS Key_NtSaveKeyEx(
+    HANDLE KeyHandle, HANDLE FileHandle, ULONG Flags)
+{
+    // todo: copy all reg keys from host to box for the used KeyHandle such that all will be saved
+    SbieApi_Log(2205, L"NtSaveKeyEx");
+    return __sys_NtSaveKeyEx(KeyHandle, FileHandle, Flags);
+}
 
 
 //---------------------------------------------------------------------------
@@ -4577,8 +4584,12 @@ _FX WCHAR* Key_NtLoadKey_GetPath(OBJECT_ATTRIBUTES* SourceObjectAttributes)
 
         IO_STATUS_BLOCK IoStatusBlock;
 
+        //
+        // open the file for write to migrate it into the box
+        //
+
         status = NtCreateFile(
-            &FileHandle, FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+            &FileHandle, FILE_GENERIC_WRITE | SYNCHRONIZE,
             SourceObjectAttributes,
             &IoStatusBlock, NULL, 0, FILE_SHARE_VALID_FLAGS,
             FILE_OPEN,
@@ -4771,7 +4782,7 @@ _FX NTSTATUS Key_NtLoadKey2(
 _FX NTSTATUS Key_NtLoadKey3(
     OBJECT_ATTRIBUTES *TargetObjectAttributes,
     OBJECT_ATTRIBUTES *SourceObjectAttributes, ULONG Flags,
-    PVOID LoadArguments, ULONG LoadArgumentCount, ACCESS_MASK DesiredAccess, HANDLE KeyHandle, ULONG Unkown)
+    PVOID LoadArguments, ULONG LoadArgumentCount, ACCESS_MASK DesiredAccess, HANDLE KeyHandle, ULONG Unknown)
 {
     NTSTATUS status;
     WCHAR* WorkPath;
@@ -4791,7 +4802,7 @@ _FX NTSTATUS Key_NtLoadKey3(
     }
 
     status = __sys_NtLoadKey3(TargetObjectAttributes, SourceObjectAttributes, Flags,
-        LoadArguments, LoadArgumentCount, DesiredAccess, KeyHandle, Unkown);
+        LoadArguments, LoadArgumentCount, DesiredAccess, KeyHandle, Unknown);
     if (status == STATUS_PRIVILEGE_NOT_HELD && !Dll_CompartmentMode)
         SbieApi_Log(2205, L"NtLoadKey3");
         //status = Key_NtLoadKeyImpl(TargetObjectAttributes, WorkPath);

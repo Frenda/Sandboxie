@@ -362,7 +362,7 @@ void Secure_InitSecurityDescriptors(void)
 
 _FX BOOLEAN Secure_Init(void)
 {
-    HMODULE module = NULL;
+    HMODULE module = Dll_Ntdll;
 
     void *RtlQueryElevationFlags;
     void *RtlCheckTokenMembershipEx;
@@ -953,7 +953,7 @@ _FX void Ldr_TestToken(HANDLE token, PHANDLE hTokenReal, BOOLEAN bImpersonate)
     }
 
     //
-    // SeAccessCheckByType requires the token to eider be 
+    // SeAccessCheckByType requires the token to either be 
     // an impersonation token of level SecurityIdentification or higher
     // or a pseudo handle, hence we have to convert the token here
     //
@@ -1108,7 +1108,7 @@ NTSTATUS Ldr_NtAccessCheckByType(PSECURITY_DESCRIPTOR SecurityDescriptor, PSID P
     NTSTATUS rc;
     HANDLE hTokenReal = NULL;
 
-    // todo: is that right? seams wrong 
+    // todo: is that right? It seems wrong
     if (Dll_ImageType == DLL_IMAGE_SANDBOXIE_BITS ||
         Dll_ImageType == DLL_IMAGE_SANDBOXIE_WUAU ||
         Dll_ImageType == DLL_IMAGE_WUAUCLT) {

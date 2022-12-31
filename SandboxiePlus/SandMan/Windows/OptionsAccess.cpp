@@ -312,6 +312,23 @@ QString COptionsWindow::GetAccessModeStr(EAccessMode Mode)
 	return tr("Unknown");
 }
 
+QString COptionsWindow::GetAccessModeTip(EAccessMode Mode)
+{
+	switch (Mode)
+	{
+	case eNormal:		return tr("Regular Sandboxie behavior - allow read and also copy on write.");
+	case eOpen:			return tr("Allow write-access outside the sandbox.");
+	case eOpen4All:		return tr("Allow write-access outside the sandbox, also for applications installed inside the sandbox.");
+	case eNoRename:		return tr("Don't rename window classes.");
+	case eClosed:		return tr("Deny access to host location and prevent creation of sandboxed copies.");
+	case eClosedRT:		return tr("Block access to WinRT class.");
+	case eReadOnly:		return tr("Allow read-only access only.");
+	case eBoxOnly:		return tr("Hide host files, folders or registry keys from sandboxed processes.");
+	case eIgnoreUIPI:	return tr("Ignore UIPI restrictions for processes.");
+	}
+	return tr("Unknown");
+}
+
 QString COptionsWindow::GetAccessTypeStr(EAccessType Type)
 {
 	switch (Type)
@@ -374,8 +391,8 @@ void COptionsWindow::AddAccessEntry(EAccessType Type, EAccessMode Mode, QString 
 
 	//////////////////////////////////////////////////////////
 	// File and Registry entries auto append a '*' wildcard 
-	// when thay don't contain any.
-	// Prepanding '|' disables this behavioure
+	// when they don't contain any.
+	// Prepending '|' disables this behaviour
 	//
 
 	QString sPath = Path;
@@ -540,9 +557,9 @@ void COptionsWindow::CloseAccessEdit(QTreeWidgetItem* pItem, bool bSave)
 		pItem->setText(1, (pNot->isChecked() ? "NOT " : "") + pCombo->currentText());
 		pItem->setData(1, Qt::UserRole, (pNot->isChecked() ? "!" : "") + Program);
 		pItem->setText(2, GetAccessModeStr(Mode));
-		pItem->setData(2, Qt::UserRole, pMode->currentData());
+		pItem->setData(2, Qt::UserRole, (int)Mode);
 		pItem->setText(3, Path);
-		pItem->setData(3, Qt::UserRole, pPath->text());
+		pItem->setData(3, Qt::UserRole, Path);
 
 		m_AccessChanged = true;
 		OnOptChanged();
@@ -616,8 +633,10 @@ void COptionsWindow::OnAccessItemDoubleClicked(QTreeWidgetItem* pItem, int Colum
 	pTree->setItemWidget(pItem, 1, pProgram);
 
 	QComboBox* pMode = new QComboBox();
-	foreach(EAccessMode Mode, GetAccessModes((EAccessType)Type))
+	foreach(EAccessMode Mode, GetAccessModes((EAccessType)Type)) {
 		pMode->addItem(GetAccessModeStr(Mode), (int)Mode);
+		pMode->setItemData(pMode->count() - 1, GetAccessModeTip(Mode), Qt::ToolTipRole);
+	}
 	pMode->setCurrentIndex(pMode->findData(pItem->data(2, Qt::UserRole)));
 	pTree->setItemWidget(pItem, 2, pMode);
 

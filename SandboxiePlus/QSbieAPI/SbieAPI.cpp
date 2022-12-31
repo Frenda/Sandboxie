@@ -405,7 +405,7 @@ SB_STATUS CSbieAPI__ConnectPort(SSbieAPI* m)
 	if (!NT_SUCCESS(status))
 		return SB_ERR(status); // 2203
 
-	// Function associate PortHandle with thread, and sends LPC_TERMINATION_MESSAGE to specified port immediatelly after call NtTerminateThread.
+	// Function associate PortHandle with thread, and sends LPC_TERMINATION_MESSAGE to specified port immediately after call NtTerminateThread.
 	//NtRegisterThreadTerminatePort(m->PortHandle);
 
 	m->SizeofPortMsg = sizeof(PORT_MESSAGE);
@@ -485,7 +485,7 @@ SB_STATUS CSbieAPI__CallServer(SSbieAPI* m, MSG_HEADER* req, MSG_HEADER** prpl)
 	if (BuffLen == 0)
 		return SB_ERR(SB_ServiceFail, QVariantList() << QString("null reply (msg %1 len %2)").arg(req->msgid, 8, 16).arg(req->length)); // 2203
 
-	// read remining chunks
+	// read remaining chunks
 	MSG_HEADER*& rpl = *prpl;
 	rpl = (MSG_HEADER*)malloc(BuffLen);
 	Buffer = (UCHAR*)rpl;
@@ -599,7 +599,7 @@ bool CSbieAPI::GetQueue()
 	}
 
 	//if(status == STATUS_END_OF_FILE) // there are no more requests in the queue at this time
-	//	return false; // nothign more to do
+	//	return false; // nothing more to do
 
 	if (NT_SUCCESS(status))
 		return true; // we did something
@@ -722,7 +722,7 @@ SB_STATUS CSbieAPI::CallServer(void* req, void* rpl) const
 	//			So for every new connection we need a new threat, we achieve this by letting our monitor threat issue all requests
 	// 
 	//		 As of Sbie build 5.50.5 the SbieCvc properly handles reconnection attempts so this mechanism is no longer necessary
-	// 	     Howeever for the queue mechanism we need the communication to be still handled by the helper thread
+	// 	     However for the queue mechanism we need the communication to be still handled by the helper thread
 	//
 
 	while (InterlockedCompareExchange(&m->SvcLock, SVC_OP_STATE_PREP, SVC_OP_STATE_IDLE) != SVC_OP_STATE_IDLE)
@@ -1327,7 +1327,7 @@ SB_STATUS CSbieAPI::ValidateName(const QString& BoxName)
 	if (BoxName.length() > 32)
 		return SB_ERR(SB_NameLenLimit);
 
-	/* invalid file name charakters on windows
+	/* invalid file name characters on windows
 	  < (less than)
 	  > (greater than)
 	  : (colon - sometimes works, but is actually NTFS Alternate Data Streams)
@@ -1755,7 +1755,7 @@ QString CSbieAPI::GetDeviceMap()
 
 	HANDLE handle;
 	NTSTATUS status = NtOpenDirectoryObject(&handle, DIRECTORY_QUERY, &objattrs);
-	if (status == STATUS_ACCESS_DENIED) // if we are missign admin rights, lets the driver do it
+	if (status == STATUS_ACCESS_DENIED) // if we are missing admin rights, lets the driver do it
 		status = CSbieAPI__OpenDeviceMap(m, &handle);
 
 	if (!NT_SUCCESS(status)) {
@@ -1835,7 +1835,7 @@ SB_STATUS CSbieAPI::RunSandboxed(const QString& BoxName, const QString& Command,
 		return SB_ERR(ERROR_INVALID_PARAMETER);
 
 	if (WrkDir.isEmpty())
-		WrkDir = QDir::currentPath();
+		WrkDir = QDir::currentPath().replace("/","\\");
 
 	ULONG cmd_len = Command.length();
 	ULONG dir_len = WrkDir.length();
@@ -1895,20 +1895,14 @@ SB_STATUS CSbieAPI::RunSandboxed(const QString& BoxName, const QString& Command,
 	
 
 	if (rpl->h.status != 0)
-		Status = SB_ERR(rpl->h.status);
+		return SB_ERR(rpl->h.status);
 
-	PROCESS_INFORMATION pi;
-	pi.hProcess = (HANDLE)rpl->hProcess;
-	pi.hThread = (HANDLE)rpl->hThread;
-	pi.dwProcessId = rpl->dwProcessId;
-	pi.dwThreadId = rpl->dwThreadId;
+	CloseHandle((HANDLE)rpl->hProcess);
+	CloseHandle((HANDLE)rpl->hThread);
 
 	free(rpl);
-
-	CloseHandle(pi.hProcess);
-	CloseHandle(pi.hThread);
 	
-	return Status;
+	return SB_OK;
 }
 
 SB_STATUS CSbieAPI__ProceccssExemptionControl(SSbieAPI* m, quint32 process_id, quint32 action_id, ULONG *NewState, ULONG *OldState)
@@ -2633,4 +2627,63 @@ void CSbieAPI::LoadEventLog()
 
     if (hEventLog)
         CloseEventLog(hEventLog);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Updater 
+//
+
+SB_RESULT(int) CSbieAPI::RunUpdateUtility(const QStringList& Params, quint32 Elevate, bool Wait)
+{
+	if (Params.isEmpty())
+		return SB_ERR(ERROR_INVALID_PARAMETER);
+
+	QString Command;
+	foreach(const QString & Param, Params) {
+		if (!Command.isEmpty()) Command += " ";
+		Command += "\"" + Param + "\"";
+	}
+
+	ULONG cmd_len = Command.length();
+
+	ULONG req_len = sizeof(PROCESS_RUN_UPDATER_REQ) + (cmd_len + 8) * sizeof(WCHAR);
+	PROCESS_RUN_UPDATER_REQ* req = (PROCESS_RUN_UPDATER_REQ*)malloc(req_len);
+
+	req->h.length = req_len;
+	req->h.msgid = MSGID_PROCESS_RUN_UPDATER;
+	req->elevate = Elevate;
+
+	WCHAR* ptr = (WCHAR*)((ULONG_PTR)req + sizeof(PROCESS_RUN_UPDATER_REQ));
+
+	req->cmd_ofs = (ULONG)((ULONG_PTR)ptr - (ULONG_PTR)req);
+	req->cmd_len = cmd_len;
+	if (cmd_len) {
+		Command.toWCharArray(ptr);
+		ptr += cmd_len;
+	}
+	*ptr++ = L'\0';
+
+	PROCESS_RUN_UPDATER_RPL *rpl;
+	SB_STATUS Status = CallServer(&req->h, &rpl);
+	free(req);
+	if (!Status)
+		return Status;
+	if (!rpl) 
+		return SB_ERR(ERROR_SERVER_DISABLED);
+	
+	if (rpl->h.status != 0)
+		return SB_ERR(rpl->h.status);
+
+	DWORD ExitCode = 0;
+	if (Wait) {
+		WaitForSingleObject((HANDLE)rpl->hProcess, INFINITE);
+		GetExitCodeProcess((HANDLE)rpl->hProcess, &ExitCode);
+	}
+
+	CloseHandle((HANDLE)rpl->hProcess);
+	CloseHandle((HANDLE)rpl->hThread);
+
+	free(rpl);
+
+	return CSbieResult<int>((int)ExitCode);
 }

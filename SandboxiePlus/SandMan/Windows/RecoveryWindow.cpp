@@ -163,6 +163,11 @@ int	CRecoveryWindow::exec()
 	return QDialog::exec();
 }
 
+bool CRecoveryWindow::IsDeleteDialog() const
+{
+	return ui.btnDeleteAll->isVisible();
+}
+
 void CRecoveryWindow::closeEvent(QCloseEvent *e)
 {
 	emit Closed();
@@ -590,7 +595,7 @@ void CRecoveryWindow::OnCloseUntil()
 void CRecoveryWindow::OnAutoDisable()
 {
 	m_pBox.objectCast<CSandBoxPlus>()->SetSuspendRecovery();
-	m_pBox->SetBool("AutoRecover", false);
+	m_pBox->SetBoolSafe("AutoRecover", false);
 	close();
 }
 
