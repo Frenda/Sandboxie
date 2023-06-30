@@ -54,7 +54,7 @@ void CSetupWizard::showHelp()
 bool CSetupWizard::ShowWizard()
 {
     CSetupWizard wizard;
-    if (!wizard.exec())
+    if (!theGUI->SafeExec(&wizard))
         return false;
     
     //bool useBusiness = wizard.field("useBusiness").toBool();
@@ -81,8 +81,10 @@ bool CSetupWizard::ShowWizard()
     if (wizard.field("useBrowserIcon").toBool())
         CSettingsWindow__AddBrowserIcon();
 
-    if (wizard.field("useWFP").toBool())
+    if (wizard.field("useWFP").toBool()) {
         theAPI->GetGlobalSettings()->SetBool("NetworkEnableWFP", true);
+        theAPI->ReloadConfig(true);
+    }
 
     if (wizard.field("isUpdate").toBool()) {
         theConf->SetValue("Options/CheckForUpdates", 1);
@@ -92,7 +94,6 @@ bool CSetupWizard::ShowWizard()
 
     theGUI->UpdateSettings(true);
     
-
     return true;
 }
 
@@ -322,7 +323,7 @@ CUIPage::CUIPage(QWidget* parent)
     buttonGroup1->addButton(m_pAdvanced, 0);
     buttonGroup1->addButton(m_pSimple, 1);
     buttonGroup1->addButton(m_pClassic, 2);
-    connect(buttonGroup1, SIGNAL(buttonClicked(int)), this, SLOT(UpdatePreview()));
+    connect(buttonGroup1, SIGNAL(buttonClicked(QAbstractButton*)), this, SLOT(UpdatePreview()));
 
     QLabel* pDummy = new QLabel();
     pDummy->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::MinimumExpanding);
@@ -349,7 +350,7 @@ CUIPage::CUIPage(QWidget* parent)
     QButtonGroup *buttonGroup2 = new QButtonGroup();
     buttonGroup2->addButton(m_pBrightMode, 0);
     buttonGroup2->addButton(m_pDarkMode, 1);
-    connect(buttonGroup2, SIGNAL(buttonClicked(int)), this, SLOT(UpdatePreview()));
+    connect(buttonGroup2, SIGNAL(buttonClicked(QAbstractButton*)), this, SLOT(UpdatePreview()));
 
 
 

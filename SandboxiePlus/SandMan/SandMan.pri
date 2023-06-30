@@ -15,6 +15,7 @@ HEADERS += ./stdafx.h \
     ./Views/SbieView.h \
     ./Views/FileView.h \
     ./Views/TraceView.h \
+    ./Views/StackView.h \
     ./Dialogs/MultiErrorDialog.h \
     ./Helpers/FindTool.h \
     ./Helpers/FullScreen.h \
@@ -31,6 +32,8 @@ HEADERS += ./stdafx.h \
     ./Windows/SelectBoxWindow.h \
     ./Windows/SupportDialog.h\
     ./OnlineUpdater.h \
+    ./Wizards/NewBoxWizard.h \
+    ./Wizards/TemplateWizard.h \
     ./Wizards/SetupWizard.h
 
 SOURCES += ./main.cpp \
@@ -46,6 +49,7 @@ SOURCES += ./main.cpp \
     ./Views/SbieView.cpp \
     ./Views/FileView.cpp \
     ./Views/TraceView.cpp \
+    ./Views/StackView.cpp \
     ./Dialogs/MultiErrorDialog.cpp \
     ./Helpers/FindTool.cpp \
     ./Helpers/FullScreen.cpp \
@@ -63,6 +67,8 @@ SOURCES += ./main.cpp \
     ./Windows/SelectBoxWindow.cpp \
     ./Windows/SupportDialog.cpp\
     ./OnlineUpdater.cpp \
+    ./Wizards/NewBoxWizard.cpp \
+    ./Wizards/TemplateWizard.cpp \
     ./Wizards/SetupWizard.cpp
 
 FORMS += ./Forms/NewBoxWindow.ui \
@@ -77,6 +83,7 @@ TRANSLATIONS += sandman_de.ts \
     sandman_en.ts \
     sandman_es.ts \
     sandman_fr.ts \
+    sandman_hu.ts \
     sandman_it.ts \
     sandman_ko.ts \
     sandman_nl.ts \

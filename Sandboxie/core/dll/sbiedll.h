@@ -80,6 +80,8 @@ SBIEDLL_EXPORT  void SbieDll_UnHookModule(HMODULE module);
 
 SBIEDLL_EXPORT  void SbieDll_DeviceChange(WPARAM wParam, LPARAM lParam);
 
+SBIEDLL_EXPORT  BOOL SbieDll_QueryFileAttributes(const WCHAR *NtPath, ULONG64 *size, ULONG64 *date, ULONG *attrs);
+
 SBIEDLL_EXPORT  const WCHAR *SbieDll_GetDrivePath(ULONG DriveIndex);
 
 SBIEDLL_EXPORT  const WCHAR *SbieDll_GetUserPathEx(WCHAR which);
@@ -186,6 +188,8 @@ SBIEDLL_EXPORT  BOOL SbieDll_StartBoxedService(
     const WCHAR *ServiceName, BOOLEAN WithAdd);
 
 SBIEDLL_EXPORT  BOOL SbieDll_CheckProcessLocalSystem(HANDLE ProcessHandle);
+
+SBIEDLL_EXPORT  VOID SbieDll_SetFakeAdmin(BOOLEAN FakeAdmin);
 
 SBIEDLL_EXPORT  HANDLE SbieDll_OpenProcess(ACCESS_MASK DesiredAccess, HANDLE idProcess);
 

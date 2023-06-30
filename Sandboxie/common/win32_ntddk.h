@@ -882,6 +882,14 @@ typedef enum _FSINFOCLASS {
     FileFsMaximumInformation
 } FS_INFORMATION_CLASS, *PFS_INFORMATION_CLASS;
 
+typedef struct _FILE_FS_VOLUME_INFORMATION {
+  LARGE_INTEGER VolumeCreationTime;
+  ULONG         VolumeSerialNumber;
+  ULONG         VolumeLabelLength;
+  BOOLEAN       SupportsObjects;
+  WCHAR         VolumeLabel[1];
+} FILE_FS_VOLUME_INFORMATION, *PFILE_FS_VOLUME_INFORMATION;
+
 __declspec(dllimport) NTSTATUS __stdcall
 NtQueryVolumeInformationFile(
     IN  HANDLE FileHandle,
@@ -2124,6 +2132,17 @@ __declspec(dllimport) NTSTATUS __stdcall NtMapViewOfSection(
     IN  ULONG AllocationType,
     IN  ULONG Protect);
 
+__declspec(dllimport) NTSTATUS __stdcall NtNotifyChangeDirectoryFile(
+    IN  HANDLE FileHandle,
+    IN  HANDLE Event OPTIONAL,
+    IN  PIO_APC_ROUTINE ApcRoutine OPTIONAL,
+    IN  PVOID ApcContext OPTIONAL,
+    OUT PIO_STATUS_BLOCK IoStatusBlock,
+    OUT PVOID Buffer,
+    IN  ULONG BufferSize,
+    IN  ULONG CompletionFilter,
+    IN  BOOLEAN WatchTree);
+
 __declspec(dllimport) NTSTATUS __stdcall NtUnmapViewOfSection(
     IN  HANDLE ProcessHandle,
     IN  PVOID BaseAddress);
@@ -2283,8 +2302,8 @@ __declspec(dllimport) NTSTATUS RtlGetGroupSecurityDescriptor(
     PSID* Group, PBOOLEAN GroupDefaulted
 );
 
-__declspec(dllimport) BOOLEAN RtlEqualSid(PSID Sid1, PSID Sid2);
-__declspec(dllimport) PVOID RtlFreeSid(PSID Sid);
+__declspec(dllimport) BOOLEAN NTAPI RtlEqualSid(PSID Sid1, PSID Sid2);
+__declspec(dllimport) PVOID NTAPI RtlFreeSid(PSID Sid);
 
 //---------------------------------------------------------------------------
 

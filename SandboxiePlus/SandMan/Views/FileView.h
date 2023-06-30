@@ -25,14 +25,14 @@ private slots:
 	void				OnFileMenu(const QPoint &);
 	void				OnFileDblClick(const QModelIndex &);
 
-	void				OnAboutToBeCleaned();
+	void				OnAboutToBeModified();
 
 protected:
 	CSandBoxPtr m_pBox;
 
 private:
 	QGridLayout*		m_pMainLayout;
-	QTreeView*			m_pTreeView;
+	QTreeViewEx*		m_pTreeView;
 	QFileSystemModel*	m_pFileModel;
 };
 

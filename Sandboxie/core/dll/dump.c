@@ -106,13 +106,16 @@ static LONG __stdcall Dump_CrashHandlerExceptionFilter(EXCEPTION_POINTERS* pEx)
     }
 #endif
 
-    SbieApi_Log(2224, L"%S [%S]", Dll_ImageName, Dll_BoxName);
+	if (pEx->ExceptionRecord->ExceptionCode == DBG_PRINTEXCEPTION_C || pEx->ExceptionRecord->ExceptionCode == DBG_PRINTEXCEPTION_WIDE_C)
+		return EXCEPTION_CONTINUE_SEARCH;
+
+    SbieApi_Log(2224, L"%S (0x%08X) [%S]", Dll_ImageName, pEx->ExceptionRecord->ExceptionCode, Dll_BoxName);
 
     BOOLEAN bSuccess = FALSE;
     HANDLE hFile;
 
     wchar_t szMiniDumpFileName[128];
-    Sbie_snwprintf(szMiniDumpFileName, 128, L"%s.%lld.dmp", Dll_ImageName, GetCurCycle);
+    Sbie_snwprintf(szMiniDumpFileName, 128, L"%s.%lld.dmp", Dll_ImageName, GetCurCycle());
 
     wchar_t szMiniDumpFilePath[MAX_PATH] = { 0 };
     Sbie_snwprintf(szMiniDumpFilePath, MAX_PATH, L"%s\\%s", Dll_BoxFilePath, szMiniDumpFileName);
@@ -173,7 +176,7 @@ ALIGNED LPTOP_LEVEL_EXCEPTION_FILTER Dump_SetUnhandledExceptionFilter(
 
 
 //---------------------------------------------------------------------------
-// Dump_SetUnhandledExceptionFilter
+// Dump_MiniDumpWriteDump
 //---------------------------------------------------------------------------
 
 
@@ -241,6 +244,9 @@ _FX int Dump_Init(void)
     // http://blog.kalmbachnet.de/?postid=75
 
     SBIEDLL_HOOK(Dump_, SetUnhandledExceptionFilter);
+
+    // Register Vectored Exception Handler
+    //AddVectoredExceptionHandler(0, Dump_CrashHandlerExceptionFilter);
 
     //SbieApi_MonitorPutMsg(MONITOR_OTHER | MONITOR_TRACE, L"Minidump enabled", FALSE);
     return 1;

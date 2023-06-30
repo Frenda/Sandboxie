@@ -38,13 +38,16 @@ private slots:
 	virtual void			OnStartFinished();
 	virtual void			SbieIniSetSection(const QString& Section, const QString& Value) { SbieIniSet(Section, "", Value); }
 
+signals:
+	void					BoxCleaned(CSandBoxPlus* pBoxEx);
+
 protected:
 	friend class CSandBoxPlus;
 
 	virtual CSandBox*		NewSandBox(const QString& BoxName, class CSbieAPI* pAPI);
 	virtual CBoxedProcess*	NewBoxedProcess(quint32 ProcessId, class CSandBox* pBox);
 
-	virtual CBoxedProcessPtr OnProcessBoxed(quint32 ProcessId, const QString& Path, const QString& Box, quint32 ParentId);
+	virtual CBoxedProcessPtr OnProcessBoxed(quint32 ProcessId, const QString& Path, const QString& Box, quint32 ParentId, const QString& CmdLine);
 
 	int						m_JobCount;
 	QMultiMap<quint32, QString> m_WindowMap;
@@ -78,8 +81,11 @@ public:
 	virtual void			OpenBox();
 	virtual void			CloseBox();
 
-	virtual SB_PROGRESS		CleanBox();
-	virtual SB_PROGRESS		SelectSnapshot(const QString& ID);
+	virtual SB_PROGRESS		CleanBox()							{ BeginModifyingBox(); SB_PROGRESS Status = CSandBox::CleanBox(); ConnectEndSlot(Status); return Status; }
+	virtual SB_STATUS		RenameBox(const QString& NewName)	{ BeginModifyingBox(); SB_STATUS Status = CSandBox::RenameBox(NewName); ConnectEndSlot(Status); return Status; }
+	virtual SB_PROGRESS		TakeSnapshot(const QString& Name)	{ BeginModifyingBox(); SB_PROGRESS Status = CSandBox::TakeSnapshot(Name); ConnectEndSlot(Status); return Status; }
+	virtual SB_PROGRESS		RemoveSnapshot(const QString& ID)	{ BeginModifyingBox(); SB_PROGRESS Status = CSandBox::RemoveSnapshot(ID); ConnectEndSlot(Status); return Status; }
+	virtual SB_PROGRESS		SelectSnapshot(const QString& ID)	{ BeginModifyingBox(); SB_PROGRESS Status = CSandBox::SelectSnapshot(ID); ConnectEndSlot(Status); return Status; }
 
 	virtual QString			GetStatusStr() const;
 
@@ -119,7 +125,9 @@ public:
 	virtual bool			IsRecoverySuspended() const			{ return m_SuspendRecovery; }
 	virtual void			SetSuspendRecovery(bool bSet = true) { m_SuspendRecovery = bSet; }
 
+	virtual QString			MakeBoxCommand(const QString& FileName);
 	virtual QString			GetCommandFile(const QString& Command);
+	virtual QString			GetFullCommand(const QString& Command);
 
 	const QSet<QString>&	GetRecentPrograms()					{ return m_RecentPrograms; }
 
@@ -139,6 +147,7 @@ public:
 
 	EBoxTypes				GetType() const { return m_BoxType; }
 	bool					IsAutoDelete() const { return m_BoxDel; }
+	bool					IsForceDisabled() const { return m_NoForce; }
 	QRgb					GetColor() const { return m_BoxColor; }
 	
 	class COptionsWindow*	m_pOptionsWnd;
@@ -146,7 +155,7 @@ public:
 
 	bool					IsOpen() const { return m_bRootAccessOpen; }
 	bool					IsBusy() const { return IsSizePending() || !m_JobQueue.isEmpty(); }
-	SB_STATUS				DeleteContentAsync(bool DeleteShapshots = true, bool bOnAutoDelete = false);
+	SB_STATUS				DeleteContentAsync(bool DeleteSnapshots = true, bool bOnAutoDelete = false);
 
 	struct SLink {
 		QString Folder;
@@ -154,12 +163,13 @@ public:
 		QString Target;
 		QString Icon;
 		int IconIndex;
+		QString WorkDir;
 	};
 
 	QList<SLink>			GetStartMenu() const { return m_StartMenu.values(); }
 
 signals:
-	void					AboutToBeCleaned();
+	void					AboutToBeModified();
 	void					StartMenuChanged();
 
 public slots:
@@ -168,8 +178,21 @@ public slots:
 	void					OnAsyncProgress(int Progress);
 	void					OnCancelAsync();
 
+protected slots:
+	virtual	void			BeginModifyingBox();
+	virtual	void			EndModifyingBox();
+
 protected:
 	friend class CSbiePlusAPI;
+
+	struct SFoundLink {
+		QString Snapshot;
+		QString LinkPath;
+		QString RealPath;
+		QString SubPath;
+	};
+
+	virtual void			ConnectEndSlot(const SB_PROGRESS& Status);
 
 	virtual bool			CheckUnsecureConfig() const;
 	EBoxTypes				GetTypeImpl() const;
@@ -183,10 +206,13 @@ protected:
 	static void				ExportBoxAsync(const CSbieProgressPtr& pProgress, const QString& ExportPath, const QString& RootPath, const QString& Section);
 	static void				ImportBoxAsync(const CSbieProgressPtr& pProgress, const QString& ImportPath, const QString& RootPath, const QString& BoxName);
 
+	bool					IsFileDeleted(const QString& RealPath, const QString& Snapshot, const QStringList& SnapshotList, const QMap<QString, QList<QString>>& DeletedPaths);
+
 	QList<QSharedPointer<CBoxJob>> m_JobQueue;
 
 	bool					m_bLogApiFound;
 	bool					m_bINetBlocked;
+	bool					m_bINetExceptions;
 	bool					m_bSharesAllowed;
 	bool					m_bDropRights;
 
@@ -208,5 +234,6 @@ protected:
 
 	EBoxTypes				m_BoxType;
 	bool					m_BoxDel;
+	bool					m_NoForce;
 	QRgb					m_BoxColor;
 };

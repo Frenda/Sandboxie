@@ -51,7 +51,7 @@ public:
 
 	virtual int						GetActiveProcessCount() const { return m_ActiveProcessCount; }
 
-	virtual SB_STATUS				RunStart(const QString& Command, bool Elevated = false);
+	virtual SB_STATUS				RunStart(const QString& Command, bool Elevated = false, const QString& WorkingDir = QString());
 	virtual SB_STATUS				RunSandboxed(const QString& Command);
 	virtual SB_STATUS				TerminateAll();
 
@@ -69,7 +69,7 @@ public:
 
 	virtual QString					Expand(const QString& Value);
 
-	virtual QList<SBoxSnapshot>		GetSnapshots(QString* pCurrent = NULL, QString* pDefault = NULL) const;
+	virtual QMap<QString, SBoxSnapshot>	GetSnapshots(QString* pCurrent = NULL, QString* pDefault = NULL) const;
 	virtual void					SetDefaultSnapshot(QString Default);
 	virtual QString					GetDefaultSnapshot(QString* pCurrent = NULL) const;
 	virtual SB_PROGRESS				TakeSnapshot(const QString& Name);

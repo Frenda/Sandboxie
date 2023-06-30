@@ -54,8 +54,17 @@ private slots:
 	void OnBoxTypChanged();
 	void UpdateBoxType();
 
+	void OnCopyItemDoubleClicked(QTreeWidgetItem* pItem, int Column);
+	void OnCopySelectionChanged() { CloseCopyEdit(); OnOptChanged(); }
+	void OnCopyChanged(QTreeWidgetItem* pItem, int Column);
+	void OnShowCopyTmpl() { LoadCopyRulesTmpl(true); }
+	void OnAddCopyRule();
+	void OnDelCopyRule();
+
 	void OnBrowsePath();
 	void OnAddCommand();
+	void OnCommandUp();
+	void OnCommandDown();
 	void OnDelCommand();
 	void OnRunChanged() { m_GeneralChanged = true;  OnOptChanged(); }
 
@@ -72,7 +81,7 @@ private slots:
 	void OnForceDir();
 	void OnDelForce();
 	void OnShowForceTmpl()			{ LoadForcedTmpl(true); }
-	void OnForcedChanged(QTreeWidgetItem* pItem, int Index);
+	void OnForcedChanged();
 
 	void OnBreakoutProg();
 	void OnBreakoutBrowse();
@@ -93,6 +102,8 @@ private slots:
 	void OnDelStartProg();
 	//void OnShowStartTmpl() 			{ LoadStartTmpl(true); }
 	void OnStartChanged(QTreeWidgetItem* pItem, int Index);
+
+	void OnHostProtectChanged();
 
 	// net
 	void OnINetItemDoubleClicked(QTreeWidgetItem* pItem, int Column);
@@ -186,6 +197,7 @@ private slots:
 	void OnTemplateClicked(QTreeWidgetItem* pItem, int Column);
 	void OnTemplateDoubleClicked(QTreeWidgetItem* pItem, int Column);
 	void OnAddTemplates();
+	void OnTemplateWizard();
 	void OnDelTemplates();
 	void OnFolderChanged();
 	void OnScreenReaders();
@@ -211,18 +223,25 @@ private slots:
 	void SetIniEdit(bool bEnable);
 	void OnEditIni();
 	void OnSaveIni();
+	void OnIniChanged();
 	void OnCancelEdit();
 
 	void OnSetTree();
 
 protected:
-	friend struct SFirewallRule;
-
 	void closeEvent(QCloseEvent *e);
 
 	bool eventFilter(QObject *watched, QEvent *e);
 
 	void OnTab(QWidget* pTab);
+
+public:
+	enum ECopyAction
+	{
+		eCopyAlways,
+		eDontCopy,
+		eCopyEmpty,
+	};
 
 	enum ENetWfAction
 	{
@@ -290,7 +309,8 @@ protected:
 		eClosedRT,
 		eReadOnly,
 		eBoxOnly,
-		eIgnoreUIPI
+		eIgnoreUIPI,
+		eMaxAccessMode
 	};
 
 	enum ETriggerAction {
@@ -301,12 +321,18 @@ protected:
 		eDeleteCmd
 	};
 
+protected:
 	void SetBoxColor(const QColor& color);
 	void UpdateBoxColor();
 
 	QString GetActionFile();
 
-	void SetProgramItem(QString Program, QTreeWidgetItem* pItem, int Column, const QString& Sufix = QString());
+	QString GetCopyActionStr(ECopyAction Action);
+	void ParseAndAddCopyRule(const QString& Value, ECopyAction Action, bool disabled = false, const QString& Template = QString());
+	void CloseCopyEdit(bool bSave = true);
+	void CloseCopyEdit(QTreeWidgetItem* pItem, bool bSave = true);
+
+	void SetProgramItem(QString Program, QTreeWidgetItem* pItem, int Column, const QString& Sufix = QString(), bool bList = true);
 
 	QString SelectProgram(bool bOrGroup = true);
 	void AddProgramToGroup(const QString& Program, const QString& Group);
@@ -315,6 +341,7 @@ protected:
 
 	void CopyGroupToList(const QString& Group, QTreeWidget* pTree, bool disabled = false);
 	QTreeWidgetItem* GetAccessEntry(EAccessType Type, const QString& Program, EAccessMode Mode, const QString& Path);
+	bool IsAccessEntrySet(EAccessType Type, const QString& Program, EAccessMode Mode, const QString& Path);
 	void SetAccessEntry(EAccessType Type, const QString& Program, EAccessMode Mode, const QString& Path);
 	void DelAccessEntry(EAccessType Type, const QString& Program, EAccessMode Mode, const QString& Path);
 
@@ -322,11 +349,15 @@ protected:
 	void SaveConfig();
 	void UpdateCurrentTab();
 
-	void AddRunItem(const QString& Name, const QString& Command);
+	void AddRunItem(const QString& Name, const QString& Icon, const QString& Command);
 
 	void CreateGeneral();
 	void LoadGeneral();
 	void SaveGeneral();
+
+	void LoadCopyRules();
+	void LoadCopyRulesTmpl(bool bUpdate = false);
+	void SaveCopyRules();
 
 	void UpdateBoxSecurity();
 
@@ -362,7 +393,6 @@ protected:
 	QString	GetINetModeStr(int Mode);
 	void CloseINetEdit(bool bSave = true);
 	void CloseINetEdit(QTreeWidgetItem* pItem, bool bSave = true);
-	void CheckINetBlock();
 	bool FindEntryInSettingList(const QString& Name, const QString& Value);
 	void LoadINetAccess();
 	void SaveINetAccess();
@@ -390,6 +420,7 @@ protected:
 	QString	GetAccessModeTip(EAccessMode Mode);
 	void ParseAndAddAccessEntry(EAccessEntry EntryType, const QString& Value, bool disabled = false, const QString& Template = QString());
 	void ParseAndAddAccessEntry(EAccessType Type, EAccessMode Mode, const QString& Value, bool disabled = false, const QString& Template = QString());
+	QString ExpandPath(EAccessType Type, const QString& Path);
 	void AddAccessEntry(EAccessType Type, EAccessMode Mode, QString Program, const QString& Path, bool disabled = false, const QString& Template = QString());
 	QString MakeAccessStr(EAccessType Type, EAccessMode Mode);
 	void SaveAccessList();
@@ -461,6 +492,7 @@ protected:
 	bool m_HoldBoxType;
 
 	bool m_GeneralChanged;
+	bool m_CopyRulesChanged;
 	bool m_GroupsChanged;
 	bool m_ForcedChanged;
 	bool m_StopChanged;
@@ -474,7 +506,6 @@ protected:
 	bool m_RecoveryChanged;
 	bool m_AdvancedChanged;
 
-	bool m_IsEnabledWFP;
 	bool m_WFPisBlocking;
 
 	bool m_Template;

@@ -1,6 +1,6 @@
 /*
  * Copyright 2004-2020 Sandboxie Holdings, LLC 
- * Copyright 2020-2022 David Xanatos, xanasoft.com
+ * Copyright 2020-2023 David Xanatos, xanasoft.com
  *
  * This program is free software: you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -340,8 +340,6 @@ static BOOLEAN File_DriveAddSN = FALSE;
 
 BOOLEAN File_Delete_v2 = FALSE;
 static BOOLEAN File_NoReparse = FALSE;
-
-static BOOLEAN File_Windows2000 = FALSE;
 
 static WCHAR *File_AltBoxPath = NULL;
 static ULONG File_AltBoxPathLen = 0;
@@ -3133,6 +3131,7 @@ ReparseLoop:
             // do that with an exe that exists outside the sandbox
             //
 
+            // $Workaround$ - 3rd party fix
             if (Dll_ImageType == DLL_IMAGE_MOZILLA_FIREFOX && (DesiredAccess & GENERIC_WRITE)) {
                 const WCHAR *dot = wcsrchr(TruePath, L'.');
                 if (dot && _wcsicmp(dot, L".exe") == 0)
@@ -3230,7 +3229,7 @@ ReparseLoop:
             status = STATUS_OBJECT_PATH_NOT_FOUND;
 
             //
-            // if this is a create operation check if the parent fodler is ok and if so clear the error
+            // if this is a create operation check if the parent folder is ok and if so clear the error
             //
 
             if (CreateDisposition != FILE_OPEN && CreateDisposition != FILE_OVERWRITE) {
@@ -7403,6 +7402,41 @@ _FX void SbieDll_DeviceChange(WPARAM wParam, LPARAM lParam)
         Dll_RefreshPathList();
     }
 }
+
+
+//---------------------------------------------------------------------------
+// SbieDll_QueryFileAttributes
+//---------------------------------------------------------------------------
+
+
+BOOL SbieDll_QueryFileAttributes(const WCHAR *NtPath, ULONG64 *size, ULONG64 *date, ULONG *attrs)
+{
+    NTSTATUS status;
+    UNICODE_STRING uni;
+    OBJECT_ATTRIBUTES objattrs;
+    FILE_NETWORK_OPEN_INFORMATION info;
+
+    uni.Buffer = (WCHAR *)NtPath;
+    uni.Length = wcslen(NtPath) * sizeof(WCHAR);
+    uni.MaximumLength = uni.Length + sizeof(WCHAR);
+
+    InitializeObjectAttributes(
+        &objattrs, &uni, OBJ_CASE_INSENSITIVE, NULL, NULL);
+
+    if(__sys_NtQueryFullAttributesFile)
+        status = __sys_NtQueryFullAttributesFile(&objattrs, &info);
+    else
+        status = NtQueryFullAttributesFile(&objattrs, &info);
+
+    if (! NT_SUCCESS(status))
+        return FALSE;
+
+    if(size) *size = info.EndOfFile.QuadPart;
+    if(date) *date = info.LastWriteTime.QuadPart;
+    if(attrs) *attrs = info.FileAttributes;
+    return TRUE;
+}
+
 
 // We don't want calls to StopTailCallOptimization to be optimized away
 #pragma optimize("", off)

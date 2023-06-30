@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "FileView.h"
 #include "SandMan.h"
+#include "../MiscHelpers/Common/Common.h"
 #include "../MiscHelpers/Common/Settings.h"
 #include "../MiscHelpers/Common/TreeItemModel.h"
 #include "../MiscHelpers/Common/OtherFunctions.h"
@@ -13,7 +14,8 @@ CFileView::CFileView(QWidget *parent)
 	m_pMainLayout->setContentsMargins(0,0,0,0);
 	this->setLayout(m_pMainLayout);
 
-    m_pTreeView = new QTreeView();
+    m_pTreeView = new QTreeViewEx();
+    m_pTreeView->setColumnFixed(0, true);
     m_pTreeView->setAlternatingRowColors(theConf->GetBool("Options/AltRowColors", false));
     m_pMainLayout->addWidget(m_pTreeView, 0, 0);
 
@@ -31,10 +33,6 @@ CFileView::CFileView(QWidget *parent)
 	m_pTreeView->setContextMenuPolicy(Qt::CustomContextMenu);
 	connect(m_pTreeView, SIGNAL(customContextMenuRequested( const QPoint& )), this, SLOT(OnFileMenu(const QPoint &)));
 	connect(m_pTreeView, SIGNAL(doubleClicked(const QModelIndex &)), this, SLOT(OnFileDblClick(const QModelIndex &)));
-
-    QByteArray Columns = theConf->GetBlob("MainWindow/FileTree_Columns");
-	if (!Columns.isEmpty())
-		m_pTreeView->header()->restoreState(Columns);
 }
 
 CFileView::~CFileView()
@@ -44,19 +42,20 @@ CFileView::~CFileView()
 
 void CFileView::SaveState()
 {
-    theConf->SetBlob("MainWindow/FileTree_Columns", m_pTreeView->header()->saveState());
+    if(m_pFileModel)
+        theConf->SetBlob("MainWindow/FileTree_Columns", m_pTreeView->header()->saveState());
 }
 
 void CFileView::SetBox(const CSandBoxPtr& pBox)
 {
-    if (!m_pBox.isNull()) disconnect(m_pBox.data(), SIGNAL(AboutToBeCleaned()), this, SLOT(OnAboutToBeCleaned()));
+    if (!m_pBox.isNull()) disconnect(m_pBox.data(), SIGNAL(AboutToBeModified()), this, SLOT(OnAboutToBeModified()));
 
 	m_pBox = pBox;
 
-    if (!m_pBox.isNull()) connect(m_pBox.data(), SIGNAL(AboutToBeCleaned()), this, SLOT(OnAboutToBeCleaned()));
+    if (!m_pBox.isNull()) connect(m_pBox.data(), SIGNAL(AboutToBeModified()), this, SLOT(OnAboutToBeModified()));
 
     QString Root;
-    if (!pBox.isNull() && !pBox->IsEmpty())
+    if (!pBox.isNull() && QFile::exists(pBox->GetFileRoot()))
         Root = pBox->GetFileRoot();
     //if (Root.isEmpty()) {
     //    //Root = theAPI->GetSbiePath();
@@ -66,12 +65,18 @@ void CFileView::SetBox(const CSandBoxPtr& pBox)
     //    m_pTreeView->setEnabled(true);
 
     if (m_pFileModel) {
-        m_pFileModel->deleteLater();
+        SaveState();
+
+        delete m_pFileModel;
         m_pFileModel = NULL;
     }
     if (!Root.isEmpty()) {
         m_pFileModel = new QFileSystemModel(this);
         m_pFileModel->setFilter(QDir::NoDotAndDotDot | QDir::AllDirs | QDir::Files | QDir::Hidden | QDir::System);
+
+        QByteArray Columns = theConf->GetBlob("MainWindow/FileTree_Columns");
+	    if (!Columns.isEmpty())
+		    m_pTreeView->header()->restoreState(Columns);
     }
     m_pTreeView->setModel(m_pFileModel);
 
@@ -87,7 +92,7 @@ void CFileView::SetBox(const CSandBoxPtr& pBox)
     }
 }
 
-void CFileView::OnAboutToBeCleaned()
+void CFileView::OnAboutToBeModified()
 {
     if (sender() == m_pBox.data())
         SetBox(CSandBoxPtr());
@@ -100,6 +105,8 @@ void CFileView::OnAboutToBeCleaned()
 #define MENU_RECOVER            1
 #define MENU_RECOVER_TO_ANY     2
 #define MENU_CREATE_SHORTCUT    3
+#define MENU_CHECK_FILE         4
+#define MENU_PIN_FILE           5
 
 void addSeparatorToShellContextMenu(HMENU hMenu)
 {
@@ -111,27 +118,36 @@ void addSeparatorToShellContextMenu(HMENU hMenu)
     InsertMenuItem(hMenu, 0, TRUE, &menu_item_info);
 }
 
-void addItemToShellContextMenu(HMENU hMenu, const wchar_t *name, int ID)
+void addItemToShellContextMenu(HMENU hMenu, const wchar_t *name, int ID, bool bChecked = false)
 {
     MENUITEMINFO menu_item_info;
     memset(&menu_item_info, 0, sizeof(MENUITEMINFO));
     menu_item_info.cbSize = sizeof(MENUITEMINFO);
     menu_item_info.fMask = MIIM_ID | MIIM_STRING | MIIM_DATA;
+    if (bChecked) {
+        menu_item_info.fMask |= MIIM_STATE;
+        menu_item_info.fState |= MFS_CHECKED;
+    }
     menu_item_info.wID = 0xF000 + ID;
     menu_item_info.dwTypeData = (wchar_t*)name;
     InsertMenuItem(hMenu, 0, TRUE, &menu_item_info);
 }
 
-int openShellContextMenu(const QStringList& Files, void * parentWindow, const CSandBoxPtr& pBox)
+int openShellContextMenu(const QStringList& Files, void* parentWindow, const CSandBoxPtr& pBox, QString* pPin = NULL)
 {
+    CComPtr<IShellFolder> pDesktop;
+    if (!SUCCEEDED(SHGetDesktopFolder(&pDesktop)))
+        return 0;
+
     std::list<CComHeapPtr<ITEMIDLIST_ABSOLUTE>> items;
     items.resize(Files.count());
     auto IT = items.begin();
     foreach(QString File, Files) {
-        CComPtr<IShellItem> item;
-        SHCreateItemFromParsingName(File.toStdWString().c_str(), NULL, IID_PPV_ARGS(&item));
-        CComQIPtr<IPersistIDList> idl(item);
-        idl->GetIDList(&*IT++);
+        //CComPtr<IShellItem> item;
+        //SHCreateItemFromParsingName(File.toStdWString().c_str(), NULL, IID_PPV_ARGS(&item));
+        //CComQIPtr<IPersistIDList> idl(item);
+        //idl->GetIDList(&*IT++);
+        pDesktop->ParseDisplayName((HWND)parentWindow, NULL, (wchar_t*)File.toStdWString().c_str(), NULL, &*IT++, NULL);
     }
 
     std::vector<LPCITEMIDLIST> list;
@@ -139,25 +155,62 @@ int openShellContextMenu(const QStringList& Files, void * parentWindow, const CS
     LPCITEMIDLIST* listPtr = &list.front();
     for (auto I = items.begin(); I != items.end(); I++)
         *listPtr++ = *I;
-    CComPtr<IShellItemArray> array;
-    SHCreateShellItemArrayFromIDLists(list.size(), &list.front(), &array);
 
-    
-    CComPtr<IContextMenu> menu;
-    array->BindToHandler(NULL, BHID_SFUIObject, IID_PPV_ARGS(&menu));
-    if (!menu) 
+    CComPtr<IContextMenu> pContextMenu;
+    //CComPtr<IShellItemArray> array;
+    //SHCreateShellItemArrayFromIDLists(list.size(), (LPCITEMIDLIST*)&list.front(), &array);
+    //array->BindToHandler(NULL, BHID_SFUIObject, IID_PPV_ARGS(&pContextMenu)); // note: this fails when the files have different parent folders
+    //if (!pContextMenu) // note: with the below approach properties and delete does not work, so a custom handler would be needed
+    //    pDesktop->GetUIObjectOf((HWND)parentWindow, list.size(), (LPCITEMIDLIST*)&list.front(), IID_IContextMenu, NULL, (void**)&pContextMenu); 
+    {
+        DEFCONTEXTMENU details = { 0 };
+        details.hwnd = (HWND)parentWindow;
+        //details.pcmcb = pContextMenuCB;
+        //details.pidlFolder = NULL;
+        details.psf = pDesktop;
+        details.cidl = list.size();
+        details.apidl = reinterpret_cast<PCUITEMID_CHILD_ARRAY>(&list.front());
+        //details.punkAssociationInfo = NULL;
+        //details.cKeys = 0;
+        //details.aKeys = NULL;
+        SHCreateDefaultContextMenu(&details, IID_IContextMenu, reinterpret_cast<LPVOID*>(&pContextMenu));
+    }
+    if (!SUCCEEDED(!pContextMenu))
         return 0;
 
     HMENU hMenu = CreatePopupMenu();
     if (!hMenu)
         return 0;
-    if (SUCCEEDED(menu->QueryContextMenu(hMenu, 0, 1, 0x7FFF, CMF_NORMAL)))
+    if (SUCCEEDED(pContextMenu->QueryContextMenu(hMenu, 0, 1, 0x7FFF, CMF_NORMAL)))
     {
         addSeparatorToShellContextMenu(hMenu);
 
         std::wstring Str1 = CFileView::tr("Create Shortcut").toStdWString();
-        if (Files.count() == 1) {
+        if (Files.count() == 1) 
+        {
             addItemToShellContextMenu(hMenu, Str1.c_str(), MENU_CREATE_SHORTCUT);
+
+            if (pPin)  
+            {
+                auto pBoxPlus = pBox.objectCast<CSandBoxPlus>();
+                QStringList RunOptions = pBox->GetTextList("RunCommand", true);
+
+                QString FoundPin;
+                QString FileName = Files.first();
+                foreach(const QString & RunOption, RunOptions) {
+		            QString CmdFile = pBoxPlus->GetCommandFile(Split2(RunOption, "|").second);
+		            if(CmdFile.compare(FileName, Qt::CaseInsensitive) == 0) {
+                        FoundPin = RunOption;
+                        break;
+                    }
+                }
+
+                *pPin = FoundPin;
+
+                std::wstring Str5 = CFileView::tr("Pin to Box Run Menu").toStdWString();
+                addItemToShellContextMenu(hMenu, Str5.c_str(), MENU_PIN_FILE, !FoundPin.isEmpty());
+            }
+
             addSeparatorToShellContextMenu(hMenu);
         }
 
@@ -166,6 +219,11 @@ int openShellContextMenu(const QStringList& Files, void * parentWindow, const CS
         std::wstring Str3 = CFileView::tr("Recover to Same Folder").toStdWString();
         addItemToShellContextMenu(hMenu, Str3.c_str(), MENU_RECOVER);
         
+        if (!pBox->GetTextList("OnFileRecovery", true, false, true).isEmpty()) {
+            std::wstring Str4 = CFileView::tr("Run Recovery Checks").toStdWString();
+            addItemToShellContextMenu(hMenu, Str4.c_str(), MENU_CHECK_FILE);
+        }
+
         POINT point;
         GetCursorPos(&point);
         int iCmd = TrackPopupMenuEx(hMenu, TPM_RETURNCMD, point.x, point.y, (HWND)parentWindow, NULL);
@@ -183,7 +241,7 @@ int openShellContextMenu(const QStringList& Files, void * parentWindow, const CS
             info.lpVerb = MAKEINTRESOURCEA(iCmd - 1);
             info.lpVerbW = MAKEINTRESOURCEW(iCmd - 1);
             info.nShow = SW_SHOWNORMAL;
-            menu->InvokeCommand((LPCMINVOKECOMMANDINFO)&info);
+            pContextMenu->InvokeCommand((LPCMINVOKECOMMANDINFO)&info);
         }
     }
     DestroyMenu(hMenu);
@@ -217,7 +275,8 @@ void CFileView::OnFileMenu(const QPoint&)
     if (Files.isEmpty())
         return;
 
-    int iCmd = openShellContextMenu(Files, (void*)this->winId(), m_pBox);
+    QString FoundPin;
+    int iCmd = openShellContextMenu(Files, (void*)this->winId(), m_pBox, &FoundPin);
     if (iCmd == 0)
         return;
 
@@ -254,10 +313,26 @@ void CFileView::OnFileMenu(const QPoint&)
                 }
             }
 
-            SB_PROGRESS Status = theGUI->RecoverFiles(m_pBox->GetName(), FileList, 0);
+            SB_PROGRESS Status = theGUI->RecoverFiles(m_pBox->GetName(), FileList, theGUI, 0);
             if (Status.GetStatus() == OP_ASYNC)
                 theGUI->AddAsyncOp(Status.GetValue());
 
+            break;
+        }
+        case MENU_CHECK_FILE:
+        {
+            SB_PROGRESS Status = theGUI->CheckFiles(m_pBox->GetName(), Files);
+            if (Status.GetStatus() == OP_ASYNC)
+                theGUI->AddAsyncOp(Status.GetValue());
+            break;
+        }
+        case MENU_PIN_FILE:
+        {
+            auto pBoxPlus = m_pBox.objectCast<CSandBoxPlus>();
+            if (FoundPin.isEmpty())
+				pBoxPlus->InsertText("RunCommand", Split2(Files.first(), "\\", true).second + "|\"" + pBoxPlus->MakeBoxCommand(Files.first()) + "\"");
+            else
+				pBoxPlus->DelValue("RunCommand", FoundPin);
             break;
         }
         case MENU_CREATE_SHORTCUT:

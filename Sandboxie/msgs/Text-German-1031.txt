@@ -198,6 +198,14 @@ SBIE1314 Änderung der Netzwerk/Firewall-Einstellungen durch Prozess '%2' verhin
 SBIE1316 Anfrage zur Erzeugung eines Geräteevents in der Sandbox verhindert
 .
 
+1317;pop;inf;02
+SBIE1317 '%2' daran gehindert auf die Sandbox Dateisystemquelle '%3' zuzugreifen
+.
+
+1318;pop;inf;02
+SBIE1318 '%2' daran gehindert auf den sandgeboxten Prozess '%3' zuzugreifen
+.
+
 1319;pop;inf;01
 SBIE1319 Druckerwarteschlangendruck zu Datei, %2 %3 verhindert
 .
@@ -318,6 +326,18 @@ SBIE2111 Prozess ist nicht zugänglich: %3, Aufruf %2
 SBIE2112 Objekt ist nicht zugänglich: %3, Aufruf %2
 .
 
+2113;pop;inf;01
+SBIE2113 Die Datei ist zu groß, um sie in die Sandbox zu kopieren, erzeuge leere Datei - %2
+.
+
+2114;pop;inf;01
+SBIE2114 Die Datei ist zu groß, um sie in die Sandbox zu kopieren, verweigere Zugriff - %2
+.
+
+2115;pop;inf;01
+SBIE2115 Die Datei ist zu groß, um sie in die Sandbox zu kopieren, öffne Datei nur schreibgeschützt - %2
+.
+
 2191;pop;inf;01
 SBIE2191 %2 sollte nicht aktualisiert werden, wenn es mit Sandboxie ausgeführt wird.
 .
@@ -336,6 +356,10 @@ SBIE2194 MSI-Installer benötigt die Aktivierung der %2 option in der ini-Datei,
 
 2195;pop;inf;01
 SBIE2195 Um Explorer.exe sandgeboxt auszuführen, darf der Zugriff auf die COM-Infrastruktur nicht geöffnet sein.
+.
+
+2196;pop;inf;01
+SBIE2196 Um den MSI Installer sandgeboxt auszuführen, darf der Zugriff auf die COM-Infrastruktur nicht geöffnet sein.
 .
 
 2198;pop;inf;01
@@ -1070,6 +1094,14 @@ Software-Kompatibilität
 
 3505;txt;01
 Zu Sandboxie beitragen
+.
+
+3506;txt;01
+Unterstützerzertifikat holen
+.
+
+3507;txt;01
+Unterstützerzertifikat verwenden
 .
 
 3446;txt;01
@@ -3334,6 +3366,30 @@ Vielen Dank, dass Sie sich für diese Anleitung Zeit nahmen. Für weitere Anleit
 Die Standardeinstellungen von Sandboxie bieten vollständigen Schutz. Die Sandboxeinstellungen finden Sie im Menü Sandbox des Sandboxie Control Fensters.
 .
 
+7988;txt;01
+Ihr Unterstützerzertifikat ist gültig, Vielen Dank :-)
+.
+
+7989;txt;01
+Das Unterstützerzertifikat ist abgelaufen :'(
+.
+
+7990;txt;01
+Bitte kopieren Sie das vollständige Unterstützerzertifikat in die Zwischenablage und drücken Sie OK.
+.
+
+7991;txt;01
+Konnte das Zertifikat nicht in einer Datei speichern.
+.
+
+7992;txt;01
+Das Zertifikat ist nicht gültig.
+.
+
+7993;txt;01
+Das Zertifikat ist gültig und wurde erfolgreich übernommen.
+.
+
 #----------------------------------------------------------------------------
 # SandboxieInstall
 #----------------------------------------------------------------------------
@@ -3503,6 +3559,10 @@ Möchten Sie Ihre Einstellungen in der Sandboxie.ini Datei behalten?
 JA wählen, um die Sandboxie.ini Datei mit den Einstellungen zu behalten.
 
 NEIN wählen, um die Sandboxie.ini Datei mit den Einstellungen zu löschen.
+.
+
+8055;ins;01
+Es ist ein Online-Update der Templates.ini und/oder der Übersetzungen für diese Version von Sandboxie verfügbar, möchten Sie es installieren?
 .
 
 #----------------------------------------------------------------------------

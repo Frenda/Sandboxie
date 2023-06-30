@@ -569,30 +569,32 @@ Function ConfirmRequirements
     !insertmacro Reg_ReadString "" ${HKEY_LOCAL_MACHINE} "'Software\Microsoft\Windows NT\CurrentVersion'" "CurrentVersion"
     Pop $0
     StrCmp $0 "" SystemCheck_Fail
-    ;StrCmp $0 "5.1" SystemCheck_Done_XP_2003
-    ;StrCmp $0 "5.2" SystemCheck_Done_XP_2003
-    StrCmp $0 "6.0" SystemCheck_Done
+    ;StrCmp $0 "5.1" SystemCheck_Done_XP_2003_Vista
+    ;StrCmp $0 "5.2" SystemCheck_Done_XP_2003_Vista
+    ;StrCmp $0 "6.0" SystemCheck_Done_XP_2003_Vista
     StrCmp $0 "6.1" SystemCheck_Done
     StrCmp $0 "6.2" SystemCheck_Done
     StrCmp $0 "6.3" SystemCheck_Done
-    StrCmp $0 "6.4" SystemCheck_Done
+    StrCmp $0 "10.0" SystemCheck_Done
     Goto SystemCheck_Fail
 
 SystemCheck_Fail:
 
     StrCmp $InstallType "Remove" SystemCheck_Force_Remove
 
-    MessageBox MB_OK|MB_ICONSTOP "$(MSG_8041)$\n\
-	Windows Vista, Windows 7, Windows 8, Windows 10."
-    StrCmp $InstallType "Upgrade" SystemCheck_Force_Remove
-    Quit
-
-;SystemCheck_Done_XP_2003:
+;SystemCheck_Done_XP_2003_Vista:
 
 !if "${_BUILDARCH}" == "x64"
 
     MessageBox MB_OK|MB_ICONSTOP "$(MSG_8041)$\n\
-	(64-bit)   Windows Vista (Service Pack 1), Windows 7, Windows 8, Windows 10."
+	(64-bit)   Windows 7, Windows 8, Windows 10, Windows 11."
+    StrCmp $InstallType "Upgrade" SystemCheck_Force_Remove
+    Quit
+
+!else
+
+    MessageBox MB_OK|MB_ICONSTOP "$(MSG_8041)$\n\
+	(32-bit)   Windows 7, Windows 8, Windows 10."
     StrCmp $InstallType "Upgrade" SystemCheck_Force_Remove
     Quit
 
@@ -847,10 +849,10 @@ Function CheckUpdates
 DoCheck:
   DetailPrint "Running UpdUtil ..."
   SetDetailsPrint listonly
-  
+
   ExecWait '"$INSTDIR\UpdUtil.exe" $0 sandboxie /step:scan /scope:meta /version:${VERSION}' $1
 	;MessageBox MB_OK "UpdUtil: $0"
-	
+
   IntCmp $1 0 is0 lessthan0 morethan0
   is0:
     ;DetailPrint "no update"
@@ -861,12 +863,12 @@ DoCheck:
   morethan0:
     DetailPrint "$$0 > 5"
     Goto Update
-    
+
 Update:
   MessageBox MB_YESNO|MB_ICONQUESTION "$(MSG_8055)" IDNO NoUpdate
-  
+
   ExecWait '"$INSTDIR\UpdUtil.exe" $0 sandboxie /step:apply /scope:meta'
-    
+
 NoUpdate:
   SetDetailsPrint both
 FunctionEnd
@@ -1181,7 +1183,7 @@ Function DeleteProgramFiles
 
     Delete "$INSTDIR\KmdUtil.exe"
     Delete "$INSTDIR\UpdUtil.exe"
-    
+
     Delete "$INSTDIR\SboxHostDll.dll"
 
     Delete "$INSTDIR\boxHostDll.dll"
@@ -1245,13 +1247,22 @@ Function DeleteProgramFiles
     StrCmp $DeleteSandboxieIni "N" SkipDeleteSandboxieIni
     Delete "$INSTDIR\${SANDBOXIE_INI}"
     Delete "$WINDIR\${SANDBOXIE_INI}"
+
 SkipDeleteSandboxieIni:
 
 ;
 ; Delete installation folder
 ;
 
+    ClearErrors
+    SetOutPath "$TEMP" ; make sure $INSTDIR is not the current directory
     RMDir "$INSTDIR"
+
+    IfErrors 0 SkipDeleteDir
+    Sleep 1000
+    RMDir "$INSTDIR"
+
+SkipDeleteDir:
 
 FunctionEnd
 

@@ -5,6 +5,35 @@
 #include "../Models/SbieModel.h"
 #include <QFileIconProvider>
 
+class CMenuEx : public QMenu
+{
+	Q_OBJECT
+public:
+	explicit CMenuEx(QWidget* parent = nullptr) : QMenu(parent) { m_MouseDown = false; }
+    explicit CMenuEx(const QString &title, QWidget *parent = nullptr) : QMenu(title, parent) { m_MouseDown = false; }
+
+	//void keyPressEvent(QKeyEvent *) override;
+    //void mouseMoveEvent(QMouseEvent *) override;
+	void mousePressEvent(QMouseEvent* e) override {
+		if (e->button() == Qt::RightButton) {
+			m_MouseDown = true;
+			return;
+		}
+		QMenu::mousePressEvent(e);
+	}
+	void mouseReleaseEvent(QMouseEvent* e) override {
+		if (e->button() == Qt::RightButton && m_MouseDown) {
+			m_MouseDown = false;
+			emit customContextMenuRequested(e->pos());
+			return;
+		}
+		QMenu::mouseReleaseEvent(e);
+	}
+
+private:
+	bool m_MouseDown;
+};
+
 class CSbieView : public CPanelView
 {
 	Q_OBJECT
@@ -22,7 +51,8 @@ public:
 
 	//virtual void				UpdateRunMenu();
 
-	virtual QString				AddNewBox();
+	virtual QString				AddNewBox(bool bAlowTemp = false);
+	virtual QString				ImportSandbox();
 	virtual QString				AddNewGroup();
 	virtual bool				TestNameAndWarn(const QString& Name);
 	virtual void				SelectBox(const QString& Name);
@@ -43,7 +73,7 @@ public slots:
 	void						Refresh();
 	void						ReloadUserConfig();
 	void						ClearUserUIConfig(const QMap<QString, CSandBoxPtr> AllBoxes = QMap<QString, CSandBoxPtr>());
-	void						SaveUserConfig();
+	void						SaveBoxGrouping();
 
 private slots:
 	void						OnToolTipCallback(const QVariant& ID, QString& ToolTip);
@@ -53,6 +83,9 @@ private slots:
 	void						OnDoubleClicked(const QModelIndex& index);
 	void						OnClicked(const QModelIndex& index);
 	void						ProcessSelection(const QItemSelection& selected, const QItemSelection& deselected);
+
+	void						OnMenuContextMenu(const QPoint& point);
+	void						OnMenuContextAction();
 
 	void						OnGroupAction();
 	void						OnGroupAction(QAction* pAction);
@@ -79,7 +112,7 @@ protected:
 
 	QMap<QString, QStringList>	m_Groups;
 	QSet<QString>				m_Collapsed;
-	//bool						m_UserConfigChanged;
+	bool						m_HoldExpand;
 
 private:
 
@@ -103,7 +136,9 @@ private:
 
 	void					ChangeExpand(const QModelIndex& index, bool bExpand);
 
-	QMenu*					GetMenuFolder(const QString& Folder, QMenu* pParent);
+	QMenu*					GetMenuFolder(const QString& Folder, QMenu* pParent, QMap<QString, QMenu*>& Folders);
+
+	bool					CreateShortcut(const QString& LinkPath, const QString& BoxName, const QString& IconPath = QString(), int IconIndex = 0, const QString& WorkDir = QString());
 
 	QVBoxLayout*			m_pMainLayout;
 
@@ -117,6 +152,7 @@ private:
 	QMenu*					m_pMenuTray;
 
 	QAction*				m_pNewBox;
+	QAction*				m_pImportBox;
 	QAction*				m_pAddGroupe;
 	QAction*				m_pRenGroupe;
 	QAction*				m_pDelGroupe;
@@ -126,6 +162,7 @@ private:
 	QAction*				m_pMenuRunMenu;
 	QMenu*					m_pMenuRunStart;
 	QMap<QString, QMenu*>	m_MenuFolders;
+	QMap<QString, QMenu*>	m_RunFolders;
 	QAction*				m_pMenuRunBrowser;
 	QAction*				m_pMenuRunMailer;
 	QMenu*					m_pMenuRunTools;
@@ -135,9 +172,7 @@ private:
 	QAction*				m_pMenuAutoRun;
 	QAction*				m_pMenuRunCmd;
 	QAction*				m_pMenuRunCmdAdmin;
-#ifdef _WIN64
 	QAction*				m_pMenuRunCmd32;
-#endif
 	QAction*				m_pMenuMkLink;
 	QMenu*					m_pMenuPresets;
 	QActionGroup*			m_pMenuPresetsAdmin;
@@ -147,6 +182,7 @@ private:
 	QAction*				m_pMenuPresetsINet;
 	QAction*				m_pMenuPresetsShares;
 	QAction*				m_pMenuPresetsRecovery;
+	QAction*				m_pMenuPresetsForce;
 	QAction*				m_pMenuOptions;
 	QAction*				m_pMenuSnapshots;
 	QAction*				m_pMenuEmptyBox;
@@ -182,6 +218,10 @@ private:
 	QAction*				m_pRemove;
 
 	int						m_iMenuRun;
+
+	QMenu*					m_pCtxMenu;
+	QAction*				m_pCtxPinToRun;
+	QAction*				m_pCtxMkLink;
 
 	QFileIconProvider		m_IconProvider;
 

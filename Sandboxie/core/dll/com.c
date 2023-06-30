@@ -1,6 +1,6 @@
 /*
  * Copyright 2004-2020 Sandboxie Holdings, LLC 
- * Copyright 2020-2021 David Xanatos, xanasoft.com
+ * Copyright 2020-2023 David Xanatos, xanasoft.com
  *
  * This program is free software: you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -426,17 +426,13 @@ _FX BOOLEAN SbieDll_IsOpenClsid(
         0x3480A401, 0xBDE9, 0x4407,
                         { 0xBC, 0x02, 0x79, 0x8A, 0x86, 0x6A, 0xC0, 0x51 } };
 
-    static const GUID CLSID_WinInetCache = {
-        0x0358B920, 0x0AC7, 0x461F,
-                        { 0x98, 0xF4, 0x58, 0xE3, 0x2C, 0xD8, 0x91, 0x48 } };
-
     //
     // open the null clsid to open all
     //
 
-    //static const GUID CLSID_Null = {
-    //    0x00000000, 0x0000, 0x0000,
-    //                    { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 } };
+    static const GUID CLSID_Null = {
+        0x00000000, 0x0000, 0x0000,
+                        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 } };
 
     if (clsctx & CLSCTX_LOCAL_SERVER) {
 
@@ -455,15 +451,6 @@ _FX BOOLEAN SbieDll_IsOpenClsid(
             return TRUE;
         }
 
-        // 
-        // Sbie builds after 5.27-1 broke IE's source view and cache,
-        // by opening WinInetCache here and in Ipc_InitPaths.
-        // with CloseWinInetCache=y this change can be undone
-        //
-
-        if (((Dll_OsBuild >= 10240) && memcmp(rclsid, &CLSID_WinInetCache, sizeof(GUID)) == 0) && !SbieApi_QueryConfBool(NULL, L"CloseWinInetCache", FALSE)) // this breaks IE view source
-            return TRUE;
-
         //
         // initialize list of user-configured CLSID exclusions
         //
@@ -477,7 +464,7 @@ _FX BOOLEAN SbieDll_IsOpenClsid(
 
         for (index = 0; index < Com_NumOpenClsids; ++index) {
             guid = &Com_OpenClsids[index];
-            if (memcmp(guid, rclsid, sizeof(GUID)) == 0 /*|| memcmp(guid, &CLSID_Null, sizeof(GUID)) == 0*/)
+            if (memcmp(guid, rclsid, sizeof(GUID)) == 0 || memcmp(guid, &CLSID_Null, sizeof(GUID)) == 0)
                 return TRUE;
         }
     }

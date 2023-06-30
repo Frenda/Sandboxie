@@ -94,6 +94,12 @@ QTreeWidgetItem* COptionsWindow::GetAccessEntry(EAccessType Type, const QString&
 	return NULL;
 }
 
+bool COptionsWindow::IsAccessEntrySet(EAccessType Type, const QString& Program, EAccessMode Mode, const QString& Path)
+{
+	QTreeWidgetItem* pItem = GetAccessEntry(Type, Program, Mode, Path);
+	return pItem && pItem->checkState(0) == Qt::Checked;
+}
+
 void COptionsWindow::SetAccessEntry(EAccessType Type, const QString& Program, EAccessMode Mode, const QString& Path)
 {
 	if (GetAccessEntry(Type, Program, Mode, Path) != NULL)
@@ -366,6 +372,20 @@ void COptionsWindow::OnBrowseFolder()
 	OnOptChanged();
 }
 
+QString COptionsWindow::ExpandPath(EAccessType Type, const QString& Path)
+{
+	QString sPath = Path;
+	if (CSandBox* pBox = qobject_cast<CSandBox*>(m_pBox.data()))
+		sPath = theAPI->Nt2DosPath(pBox->Expand(sPath));
+	if ((Type == eFile || Type == eKey) && !sPath.isEmpty()) { 
+		if (sPath.left(1) == "|")
+			return sPath.mid(1);
+		else if (!sPath.contains("*") && sPath.right(1) != "*")
+			return sPath + "*";
+	}
+	return sPath;
+}
+
 void COptionsWindow::AddAccessEntry(EAccessType Type, EAccessMode Mode, QString Program, const QString& Path, bool disabled, const QString& Template)
 {
 	QTreeWidgetItem* pItem = new QTreeWidgetItem();
@@ -395,12 +415,7 @@ void COptionsWindow::AddAccessEntry(EAccessType Type, EAccessMode Mode, QString 
 	// Prepending '|' disables this behaviour
 	//
 
-	QString sPath = Path;
-	if (Type == eFile || Type == eKey) { 
-		if (!sPath.isEmpty() && sPath.left(1) != "|" && !sPath.contains("*") && sPath.right(1) != "*")
-			sPath.append("*");
-	}
-	pItem->setText(3, sPath);
+	pItem->setText(3, ExpandPath(Type, Path));
 	pItem->setData(3, Qt::UserRole, Path);
 
 	if(Template.isEmpty())
@@ -554,11 +569,12 @@ void COptionsWindow::CloseAccessEdit(QTreeWidgetItem* pItem, bool bSave)
 			Path = "*";
 		}
 
+		EAccessType Type = (EAccessType)pItem->data(0, Qt::UserRole).toInt();
 		pItem->setText(1, (pNot->isChecked() ? "NOT " : "") + pCombo->currentText());
 		pItem->setData(1, Qt::UserRole, (pNot->isChecked() ? "!" : "") + Program);
 		pItem->setText(2, GetAccessModeStr(Mode));
 		pItem->setData(2, Qt::UserRole, (int)Mode);
-		pItem->setText(3, Path);
+		pItem->setText(3, ExpandPath(Type, Path));
 		pItem->setData(3, Qt::UserRole, Path);
 
 		m_AccessChanged = true;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 David Xanatos, xanasoft.com
+ * Copyright 2022-2023 David Xanatos, xanasoft.com
  *
  * This program is free software: you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -57,7 +57,8 @@ static CRITICAL_SECTION *Key_PathRoot_CritSec = NULL;
 
 BOOLEAN Key_RegPaths_Loaded = FALSE;
 
-static HANDLE Key_BoxRootWatcher = NULL;
+static ULONG64 Key_PathsFileSize = 0;
+static ULONG64 Key_PathsFileDate = 0;
 static volatile ULONGLONG Key_PathsVersion = 0; // count reloads
 
 
@@ -86,6 +87,11 @@ ULONG File_GetPathFlags_internal(LIST* Root, const WCHAR* Path, WCHAR** pRelocat
 VOID File_SavePathNode_internal(HANDLE hPathsFile, LIST* parent, WCHAR* Path, ULONG Length, ULONG SetFlags);
 BOOLEAN File_MarkDeleted_internal(LIST* Root, const WCHAR* Path);
 VOID File_SetRelocation_internal(LIST* Root, const WCHAR* OldTruePath, const WCHAR* NewTruePath);
+
+BOOL File_InitBoxRootWatcher();
+BOOL File_TestBoxRootChange(ULONG WatchBit);
+
+BOOL File_GetAttributes_internal(const WCHAR *name, ULONG64 *size, ULONG64 *date, ULONG *attrs);
 
 HANDLE File_AcquireMutex(const WCHAR* MutexName);
 void File_ReleaseMutex(HANDLE hMutex);
@@ -124,9 +130,11 @@ _FX BOOLEAN Key_SavePathTree()
 
     File_SavePathTree_internal(&Key_PathRoot, KEY_PATH_FILE_NAME);
 
-    LeaveCriticalSection(Key_PathRoot_CritSec);
+    File_GetAttributes_internal(KEY_PATH_FILE_NAME, &Key_PathsFileSize, &Key_PathsFileDate, NULL);
 
     Key_PathsVersion++;
+
+    LeaveCriticalSection(Key_PathRoot_CritSec);
 
     return TRUE;
 }
@@ -162,18 +170,22 @@ _FX BOOLEAN Key_LoadPathTree()
 
 _FX VOID Key_RefreshPathTree()
 {
-    if (!Key_BoxRootWatcher)
-        return;
+    if (File_TestBoxRootChange(1)) {
 
-    if (WaitForSingleObject(Key_BoxRootWatcher, 0) == WAIT_OBJECT_0) {
+        ULONG64 PathsFileSize = 0;
+        ULONG64 PathsFileDate = 0;
+        if (File_GetAttributes_internal(KEY_PATH_FILE_NAME, &PathsFileSize, &PathsFileDate, NULL)
+            && (Key_PathsFileSize != PathsFileSize || Key_PathsFileDate != PathsFileDate)) {
 
-        //
-        // something changed, reload the path tree
-        //
+            Key_PathsFileSize = PathsFileSize;
+            Key_PathsFileDate = PathsFileDate;
 
-        Key_LoadPathTree();
+            //
+            // something changed, reload the path tree
+            //
 
-        FindNextChangeNotification(Key_BoxRootWatcher); // rearm the watcher
+            Key_LoadPathTree();
+        }
     }
 }
 
@@ -195,14 +207,10 @@ _FX BOOLEAN Key_InitDelete_v2()
 //#ifdef WITH_DEBUG
 //    Key_SavePathTree();
 //#endif
+    
+    File_GetAttributes_internal(KEY_PATH_FILE_NAME, &Key_PathsFileSize, &Key_PathsFileDate, NULL);
 
-    WCHAR BoxFilePath[MAX_PATH] = { 0 };
-    wcscpy(BoxFilePath, Dll_BoxFilePath);
-    SbieDll_TranslateNtToDosPath(BoxFilePath);
-
-    Key_BoxRootWatcher = FindFirstChangeNotification(BoxFilePath, FALSE, FILE_NOTIFY_CHANGE_SIZE | FILE_NOTIFY_CHANGE_LAST_WRITE);
-
-    FindNextChangeNotification(Key_BoxRootWatcher); // arm the watcher
+    File_InitBoxRootWatcher();
 
     return TRUE;
 }

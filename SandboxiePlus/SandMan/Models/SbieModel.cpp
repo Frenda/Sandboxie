@@ -21,6 +21,8 @@ CSbieModel::CSbieModel(QObject *parent)
 
 CSbieModel::~CSbieModel()
 {
+	FreeNode(m_Root);
+	m_Root = NULL;
 }
 
 QList<QVariant> CSbieModel::MakeProcPath(const QString& BoxName, const CBoxedProcessPtr& pProcess, const QMap<quint32, CBoxedProcessPtr>& ProcessList)
@@ -119,6 +121,7 @@ QList<QVariant> CSbieModel::Sync(const QMap<QString, CSandBoxPtr>& BoxList, cons
 	bool bGroupsFirst = theConf->GetBool("Options/SortGroupsFirst", false);
 	bool bWatchSize = theConf->GetBool("Options/WatchBoxSize", false);
 	bool ColorIcons = theConf->GetBool("Options/ColorBoxIcons", false);
+	bool OverlayIcons = theConf->GetBool("Options/UseOverlayIcons", true);
 	bool bPlus = (theAPI->GetFeatureFlags() & CSbieAPI::eSbieFeatureCert) != 0;
 	bool bVintage = theConf->GetInt("Options/ViewMode", 1) == 2;
 	if (bVintage)
@@ -221,13 +224,14 @@ QList<QVariant> CSbieModel::Sync(const QMap<QString, CSandBoxPtr>& BoxList, cons
 		bool Busy = pBoxEx->IsBusy();
 		int boxType = pBoxEx->GetType();
 		bool boxDel = pBoxEx->IsAutoDelete();
+		bool boxNoForce = pBoxEx->IsForceDisabled();
 		int boxColor = pBoxEx->GetColor();
 		
 		QIcon Icon;
 		QString BoxIcon = pBox->GetText("BoxIcon");
 		if (!BoxIcon.isEmpty())
 		{
-			if (pNode->BoxIcon != BoxIcon || (pNode->busyState || Busy) || pNode->boxDel != boxDel) 
+			if (pNode->BoxIcon != BoxIcon || (pNode->busyState || Busy) || pNode->boxDel != boxDel || pNode->boxNoForce != boxNoForce) 
 			{
 				StrPair PathIndex = Split2(BoxIcon, ",");
 				if (!PathIndex.second.isEmpty() && !PathIndex.second.contains("."))
@@ -237,13 +241,14 @@ QList<QVariant> CSbieModel::Sync(const QMap<QString, CSandBoxPtr>& BoxList, cons
 				pNode->BoxIcon = BoxIcon;
 			}
 		}
-		else if (pNode->inUse != inUse || pNode->bOpen != bOpen || (pNode->busyState || Busy) || pNode->boxType != boxType || pNode->boxColor != boxColor || pNode->boxDel != boxDel || !pNode->BoxIcon.isEmpty())
+		else if (pNode->inUse != inUse || pNode->bOpen != bOpen || (pNode->busyState || Busy) || pNode->boxType != boxType || pNode->boxColor != boxColor || pNode->boxDel != boxDel || pNode->boxNoForce != boxNoForce || !pNode->BoxIcon.isEmpty())
 		{
 			pNode->inUse = inUse;
 			pNode->bOpen = bOpen;
 			pNode->boxType = boxType;
 			pNode->boxColor = boxColor;
 			pNode->boxDel = boxDel;
+			pNode->boxNoForce = boxNoForce;
 			//pNode->Icon = pNode->inUse ? m_BoxInUse : m_BoxEmpty;
 			if(ColorIcons)
 				Icon = theGUI->GetColorIcon(boxColor, inUse);
@@ -259,8 +264,13 @@ QList<QVariant> CSbieModel::Sync(const QMap<QString, CSandBoxPtr>& BoxList, cons
 			else {
 				pNode->busyState = 0;
 
-				if(boxDel && !bVintage)
-					Icon = theGUI->MakeIconRecycle(Icon);
+				if (OverlayIcons) 
+				{
+					if(boxNoForce)
+						Icon = theGUI->IconAddOverlay(Icon, ":/IconDFP");
+					else if (boxDel && !bVintage)
+						Icon = theGUI->IconAddOverlay(Icon, ":/Boxes/AutoDel");
+				}
 			}
 			
 			if (m_LargeIcons) // but not for boxes
@@ -279,7 +289,7 @@ QList<QVariant> CSbieModel::Sync(const QMap<QString, CSandBoxPtr>& BoxList, cons
 
 		for(int section = 0; section < columnCount(); section++)
 		{
-			if (!m_Columns.contains(section))
+			if (!IsColumnEnabled(section))
 				continue; // ignore columns which are hidden
 
 			QVariant Value;
@@ -329,6 +339,7 @@ bool CSbieModel::Sync(const CSandBoxPtr& pBox, const QList<QVariant>& Path, cons
 	QString BoxName = pBox->GetName();
 
 	int ActiveCount = 0;
+	bool OverlayIcons = theConf->GetBool("Options/UseOverlayIcons", true);
 
 	foreach(const CBoxedProcessPtr& pProc, ProcessList)
 	{
@@ -381,21 +392,40 @@ bool CSbieModel::Sync(const CSandBoxPtr& pBox, const QList<QVariant>& Path, cons
 			//else
 			//	pNode->Icon = icons.first().pixmap;
 
-			pNode->Icon = m_IconProvider.icon(QFileInfo(pProcess->GetFileName()));
-			if (pNode->Icon.isNull() || !pNode->Icon.isValid())
-				pNode->Icon = m_ExeIcon;
+			QIcon Icon = m_IconProvider.icon(QFileInfo(pProcess->GetFileName()));
+			if (Icon.isNull())
+				Icon = m_ExeIcon;
+
+			if (OverlayIcons) {
+				if (pProcess->HasSystemToken())
+					Icon = theGUI->IconAddOverlay(Icon, ":/Actions/SystemShield.png", 20);
+				else if (pProcess->HasElevatedToken())
+					Icon = theGUI->IconAddOverlay(Icon, ":/Actions/AdminShield.png", 20);
+				else if (pProcess->HasAppContainerToken())
+					Icon = theGUI->IconAddOverlay(Icon, ":/Actions/AppContainer.png", 20); // AppContainer is also Restricted
+				else if (pProcess->HasRestrictedToken())
+					Icon = theGUI->IconAddOverlay(Icon, ":/Actions/Restricted.png", 20);
+			}
+
+			pNode->Icon = Icon;
 			Changed = 1;
 		}
 
 		for (int section = 0; section < columnCount(); section++)
 		{
-			if (!m_Columns.contains(section))
+			if (!IsColumnEnabled(section))
 				continue; // ignore columns which are hidden
 
 			QVariant Value;
 			switch (section)
 			{
-			case eName:				Value = pProcess->GetProcessName(); break;
+			case eName: {				
+							QString Name = pProcess->GetProcessName(); 
+							if (pProcess->IsWoW64())
+								Name += " *32";
+							Value = Name;
+							break;
+						}
 			case eProcessId:		Value = pProcess->GetProcessId(); break;
 			case eStatus:			Value = pProcess->GetStatusStr(); break;
 			case eTitle:			Value = theAPI->GetProcessTitle(pProcess->GetProcessId()); break;

@@ -43,15 +43,14 @@ void COptionsWindow::CreateNetwork()
 
 void COptionsWindow::LoadINetAccess()
 {
-	m_IsEnabledWFP = m_pBox->GetAPI()->GetGlobalSettings()->GetBool("NetworkEnableWFP", false);
 	// check if we are blocking globally and if so adapt the behaviour accordingly
 	m_WFPisBlocking = !m_pBox->GetAPI()->GetGlobalSettings()->GetBool("AllowNetworkAccess", true); 
 	
-	ui.lblNoWfp->setVisible(!m_IsEnabledWFP); // warn user that this is only user mode
+	ui.lblNoWfp->setVisible(!theGUI->IsWFPEnabled()); // warn user that this is only user mode
 
 	ui.cmbBlockINet->clear();
 	ui.cmbBlockINet->addItem(tr("Allow access"), 0);
-	if (m_IsEnabledWFP) ui.cmbBlockINet->addItem(tr("Block using Windows Filtering Platform"), 1);
+	if (theGUI->IsWFPEnabled()) ui.cmbBlockINet->addItem(tr("Block using Windows Filtering Platform"), 1);
 	ui.cmbBlockINet->addItem(tr("Block by denying access to Network devices"), 2);
 
 	m_INetBlockChanged = false;
@@ -60,10 +59,33 @@ void COptionsWindow::LoadINetAccess()
 void COptionsWindow::SaveINetAccess()
 {
 	int Mode = ui.cmbBlockINet->currentData().toInt();
-	if (Mode == 1)				m_pBox->InsertText("AllowNetworkAccess", "!<InternetAccess>,n");
-	else						m_pBox->DelValue("AllowNetworkAccess", "!<InternetAccess>,n");
-	if (Mode != 0)				m_pBox->DelValue("AllowNetworkAccess", "y");
-	else if (m_WFPisBlocking)	m_pBox->InsertText("AllowNetworkAccess", "y");
+	if (Mode == 1) {
+		if (!FindEntryInSettingList("AllowNetworkAccess", "!<InternetAccess>,n"))
+			m_pBox->InsertText("AllowNetworkAccess", "!<InternetAccess>,n");
+	}
+	else
+		m_pBox->DelValue("AllowNetworkAccess", "!<InternetAccess>,n");
+
+	if (Mode == 0) {
+		if (m_WFPisBlocking && !FindEntryInSettingList("AllowNetworkAccess", "y"))
+			m_pBox->InsertText("AllowNetworkAccess", "y");
+	}
+	else
+		m_pBox->DelValue("AllowNetworkAccess", "y");
+
+	QTreeWidgetItem* pBlockedNet = FindGroupByName("<BlockNetAccess>");
+	if (pBlockedNet && pBlockedNet->childCount() > 0) {
+		if (theGUI->IsWFPEnabled() && !FindEntryInSettingList("AllowNetworkAccess", "<BlockNetAccess>,n"))
+			m_pBox->InsertText("AllowNetworkAccess", "<BlockNetAccess>,n");
+	}
+	else
+		m_pBox->DelValue("AllowNetworkAccess", "<BlockNetAccess>,n");
+
+	QTreeWidgetItem* pBlockedDev = FindGroupByName("<BlockNetDevices>");
+	if (pBlockedDev && pBlockedDev->childCount() > 0)
+		SetAccessEntry(eFile, "<BlockNetDevices>", eClosed, "InternetAccessDevices");
+	else
+		DelAccessEntry(eFile, "<BlockNetDevices>", eClosed, "InternetAccessDevices");
 
 	WriteAdvancedCheck(ui.chkINetBlockPrompt, "PromptForInternetAccess", "y", "");
 	WriteAdvancedCheck(ui.chkINetBlockMsg, "NotifyInternetAccessDenied", "", "n");
@@ -98,9 +120,9 @@ QString COptionsWindow::INetModeToGroup(int Mode)
 
 void COptionsWindow::LoadBlockINet()
 {
-	if (GetAccessEntry(eFile, "!<InternetAccess>", eClosed, "InternetAccessDevices") != NULL)
+	if (IsAccessEntrySet(eFile, "!<InternetAccess>", eClosed, "InternetAccessDevices"))
 		ui.cmbBlockINet->setCurrentIndex(ui.cmbBlockINet->findData(2));
-	else if (m_IsEnabledWFP && (FindEntryInSettingList("AllowNetworkAccess", "!<InternetAccess>,n") 
+	else if (theGUI->IsWFPEnabled() && (FindEntryInSettingList("AllowNetworkAccess", "!<InternetAccess>,n") 
 		|| (m_WFPisBlocking && !FindEntryInSettingList("AllowNetworkAccess", "y"))))
 		ui.cmbBlockINet->setCurrentIndex(ui.cmbBlockINet->findData(1));
 	else
@@ -129,11 +151,12 @@ void COptionsWindow::LoadBlockINet()
 
 			QTreeWidgetItem* pItem = new QTreeWidgetItem();
 			pItem->setCheckState(0, (Mode & 0x10) != 0 ? Qt::Unchecked : Qt::Checked);
+			Mode &= ~0x10;
 			
 			SetProgramItem(Value, pItem, 0);
 	
 			pItem->setData(1, Qt::UserRole, Mode);
-			if (!m_IsEnabledWFP && Mode == 1) Mode = -1; // this mode is not available
+			if (!theGUI->IsWFPEnabled() && Mode == 1) Mode = -1; // this mode is not available
 			pItem->setText(1, GetINetModeStr(Mode));
 
 			ui.treeINet->addTopLevelItem(pItem);
@@ -185,7 +208,7 @@ void COptionsWindow::OnINetItemDoubleClicked(QTreeWidgetItem* pItem, int Column)
 
 	QComboBox* pMode = new QComboBox();
 	for (int i = 0; i < 3; i++) {
-		if (!m_IsEnabledWFP && i == 1) continue; // this mode is not available
+		if (!theGUI->IsWFPEnabled() && i == 1) continue; // this mode is not available
 		pMode->addItem(GetINetModeStr(i), i);
 	}
 	pMode->setCurrentIndex(pMode->findData(pItem->data(1, Qt::UserRole)));
@@ -215,6 +238,9 @@ void COptionsWindow::OnINetChanged(QTreeWidgetItem* pItem, int Column)
 			AddProgramToGroup(Program, INetModeToGroup(Mode));
 		}
 	}
+
+	m_INetBlockChanged = true;
+	OnOptChanged();
 }
 
 void COptionsWindow::CloseINetEdit(bool bSave)
@@ -248,6 +274,10 @@ void COptionsWindow::CloseINetEdit(QTreeWidgetItem* pItem, bool bSave)
 
 
 		QString NewProgram = pCombo->currentText();
+		if (NewProgram.isEmpty()) {
+			QMessageBox::warning(this, "SandboxiePlus", tr("A non empty program name is required."));
+			return;
+		}
 		int NewMode = pMode->currentData().toInt();
 		if (pItem->checkState(0) == Qt::Unchecked)
 			NewMode |= 0x10;
@@ -258,6 +288,9 @@ void COptionsWindow::CloseINetEdit(QTreeWidgetItem* pItem, bool bSave)
 	
 		pItem->setText(1, GetINetModeStr(NewMode));
 		pItem->setData(1, Qt::UserRole, NewMode);
+
+		m_INetBlockChanged = true;
+		OnOptChanged();
 	}
 
 	ui.treeINet->setItemWidget(pItem, 0, NULL);
@@ -304,8 +337,8 @@ void COptionsWindow::OnAddINetProg()
 
 	AddProgramToGroup(Value, INetModeToGroup(Mode));
 
-	//m_INetBlockChanged = true;
-	//OnOptChanged();
+	m_INetBlockChanged = true;
+	OnOptChanged();
 }
 
 void COptionsWindow::OnDelINetProg()
@@ -322,8 +355,8 @@ void COptionsWindow::OnDelINetProg()
 
 	delete pItem;
 
-	//m_INetBlockChanged = true;
-	//OnOptChanged();
+	m_INetBlockChanged = true;
+	OnOptChanged();
 }
 
 bool COptionsWindow::FindEntryInSettingList(const QString& Name, const QString& Value)
@@ -336,17 +369,10 @@ bool COptionsWindow::FindEntryInSettingList(const QString& Name, const QString& 
 	return false;
 }
 
-void COptionsWindow::CheckINetBlock()
-{
-	SetAccessEntry(eFile, "<BlockNetDevices>", eClosed, "InternetAccessDevices");
-
-	if (m_IsEnabledWFP && !FindEntryInSettingList("AllowNetworkAccess", "<BlockNetAccess>,n"))
-		m_pBox->InsertText("AllowNetworkAccess", "<BlockNetAccess>,n");
-}
-
 void COptionsWindow::LoadNetFwRules()
 {
 	ui.treeNetFw->clear();
+
 	foreach(const QString & Value, m_pBox->GetTextList("NetworkAccess", m_Template))
 		ParseAndAddFwRule(Value);
 
@@ -664,27 +690,29 @@ void COptionsWindow::OnDelNetFwRule()
 
 void COptionsWindow__SetRowColor(QTreeWidgetItem* pItem, bool bMatch, bool bConflict = false, bool bBlock = false, bool bActive = false)
 {
+	#define setColor(i, b) theGUI->m_DarkTheme ? pItem->setForeground(i, b) : pItem->setBackground(i, b)
+
 	for (int i = 0; i < pItem->columnCount(); i++)
 	{
 		if (!bMatch)
 		{
-			pItem->setBackground(i, Qt::white); // todo dark mode
+			setColor(i, Qt::white);
 		}
 		else if(bConflict)
-			pItem->setBackground(i, QColor(255, 255, 0)); // yellow
+			setColor(i, QColor(255, 255, 0)); // yellow
 		else if (!bBlock)
 		{
 			if (bActive)
-				pItem->setBackground(i, QColor(128, 255, 128)); // dark green
+				setColor(i, QColor(128, 255, 128)); // dark green
 			else
-				pItem->setBackground(i, QColor(224, 240, 224)); // light green
+				setColor(i, QColor(224, 240, 224)); // light green
 		}
 		else
 		{
 			if (bActive)
-				pItem->setBackground(i, QColor(255, 128, 128)); // dark red
+				setColor(i, QColor(255, 128, 128)); // dark red
 			else
-				pItem->setBackground(i, QColor(240, 224, 224)); // light red
+				setColor(i, QColor(240, 224, 224)); // light red
 		}
 	}
 }

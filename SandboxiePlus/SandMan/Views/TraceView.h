@@ -5,10 +5,11 @@
 #include "../Models/SbieModel.h"
 #include "../Models/TraceModel.h"
 #include "../Models/MonitorModel.h"
+#include "../../MiscHelpers/Common/SortFilterProxyModel.h"
+#include "StackView.h"
 
-class CTraceFilterProxyModel;
 
-class CTraceTree : public CPanelWidget<QTreeViewEx>
+class CTraceTree : public CPanelView
 {
 	Q_OBJECT
 public:
@@ -16,16 +17,36 @@ public:
 	CTraceTree(QWidget* parent = 0);
 	~CTraceTree();
 
+	virtual QMenu*				GetMenu()	{ return m_pMenu; }
+
+	virtual QTreeViewEx*		GetTree()	{ return m_pTreeList; }
+	virtual QTreeView*			GetView()	{ return m_pTreeList; }
+	virtual QAbstractItemModel* GetModel()	{ return m_pTreeList->model(); }
+
 	CTraceModel*		m_pTraceModel;
 
 public slots:
-	void				SetFilter(const QRegularExpression& Exp, bool bHighLight = false, int Column = -1) {
-		emit FilterSet(Exp, bHighLight, Column);
-	}
-	void				SelectNext() {}
+	void				SetFilter(const QString& Exp, int iOptions = 0, int Column = -1);
+
+	void				ItemSelection(const QItemSelection& selected, const QItemSelection& deselected);
 
 signals:
-	void				FilterSet(const QRegularExpression& Exp, bool bHighLight = false, int Column = -1);
+	void				FilterChanged();
+
+protected:
+	friend class CTraceView;
+
+	QString				GetFilterExp() const { return m_FilterExp; }
+
+	QVBoxLayout*		m_pMainLayout;
+	QSplitter*			m_pSplitter;
+	QTreeViewEx*		m_pTreeList;
+	CStackView*			m_pStackView;
+
+	//QRegularExpression	m_FilterExp;
+	QString				m_FilterExp;
+	bool				m_bHighLight;
+	//int					m_FilterCol;
 };
 
 class CMonitorList : public CPanelWidget<QTreeViewEx>
@@ -39,7 +60,6 @@ public:
 	CMonitorModel*		m_pMonitorModel;
 };
 
-
 class CTraceView : public QWidget
 {
 	Q_OBJECT
@@ -49,19 +69,23 @@ public:
 
 	void				AddAction(QAction* pAction);
 
+	void				SetEnabled(bool bSet);
+
 public slots:
 	void				Refresh();
 	void				Clear();
 
 	void				OnSetTree();
+	void				OnObjTree();
 	void				OnSetMode();
 	void				OnSetPidFilter();
 	void				OnSetTidFilter();
 	void				OnSetFilter();
+	void				OnShowStack();
 
 private slots:
 	void				UpdateFilters();
-	void				SetFilter(const QRegularExpression& Exp, bool bHighLight = false, int Col = -1); // -1 = any
+	void				OnFilterChanged();
 
 	void				SaveToFile();
 
@@ -79,16 +103,12 @@ protected:
 	quint64					m_LastID;
 	int						m_LastCount;
 	bool					m_bUpdatePending;
+	QVector<CTraceEntryPtr> m_TraceList;
 	QMap<QString, CMonitorEntryPtr> m_MonitorMap;
 
 protected:
-	friend int CTraceView__Filter(const CTraceEntryPtr& pEntry, void* params);
-
 	bool				m_FullRefresh;
 
-	QRegularExpression	m_FilterExp;
-	bool				m_bHighLight;
-	//int					m_FilterCol;
 	quint32				m_FilterPid;
 	quint32				m_FilterTid;
 	QList<quint32>		m_FilterTypes;
@@ -103,11 +123,13 @@ protected:
 	QToolBar*			m_pTraceToolBar;
 	QAction*			m_pMonitorMode;
 	QAction*			m_pTraceTree;
+	QAction*			m_pObjectTree;
 	QComboBox*			m_pTracePid;
 	QComboBox*			m_pTraceTid;
 	class QCheckList*	m_pTraceType;
 	QComboBox*			m_pTraceStatus;
 	QAction*			m_pAllBoxes;
+	QAction*			m_pShowStack;
 	QAction*			m_pSaveToFile;
 
 	QWidget*			m_pView;

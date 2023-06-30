@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 David Xanatos, xanasoft.com
+ * Copyright 2022-2023 David Xanatos, xanasoft.com
  *
  * This program is free software: you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -67,6 +67,12 @@ static LIST File_PathRoot;
 static CRITICAL_SECTION *File_PathRoot_CritSec = NULL;
 
 static HANDLE File_BoxRootWatcher = NULL;
+static IO_STATUS_BLOCK File_NotifyIosb;
+static FILE_NOTIFY_INFORMATION File_NotifyInfo[2];
+static ULONG File_BoxRootChangeBits = 0;
+
+static ULONG64 File_PathsFileSize = 0;
+static ULONG64 File_PathsFileDate = 0;
 
 //---------------------------------------------------------------------------
 // Functions
@@ -83,6 +89,11 @@ static ULONG File_IsDeleted_v2(const WCHAR* TruePath);
 static BOOLEAN File_HasDeleted_v2(const WCHAR* TruePath);
 static WCHAR* File_GetRelocation(const WCHAR* TruePath);
 static NTSTATUS File_SetRelocation(const WCHAR *OldTruePath, const WCHAR *NewTruePath);
+
+BOOL File_InitBoxRootWatcher();
+BOOL File_TestBoxRootChange(ULONG WatchBit);
+
+BOOL File_GetAttributes_internal(const WCHAR *name, ULONG64 *size, ULONG64 *date, ULONG *attrs);
 
 HANDLE File_AcquireMutex(const WCHAR* MutexName);
 void File_ReleaseMutex(HANDLE hMutex);
@@ -392,11 +403,16 @@ _FX VOID File_SavePathTree_internal(LIST* Root, const WCHAR* name)
     wcscpy(PathsFile, Dll_BoxFilePath);
     wcscat(PathsFile, L"\\");
     wcscat(PathsFile, name);
-    SbieDll_TranslateNtToDosPath(PathsFile);
+
+    UNICODE_STRING objname;
+    RtlInitUnicodeString(&objname, PathsFile);
+
+    OBJECT_ATTRIBUTES objattrs;
+    InitializeObjectAttributes(&objattrs, &objname, OBJ_CASE_INSENSITIVE, NULL, NULL);
 
     HANDLE hPathsFile;
-    hPathsFile = CreateFile(PathsFile, FILE_APPEND_DATA, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (hPathsFile == INVALID_HANDLE_VALUE)
+    IO_STATUS_BLOCK IoStatusBlock;
+    if (!NT_SUCCESS(NtCreateFile(&hPathsFile, GENERIC_WRITE | SYNCHRONIZE , &objattrs, &IoStatusBlock, NULL, 0, FILE_SHARE_READ, FILE_OVERWRITE_IF, FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE, NULL, 0)))
         return;
     
     WCHAR* Path = (WCHAR *)Dll_Alloc((0x7FFF + 1)*sizeof(WCHAR)); // max nt path
@@ -405,7 +421,7 @@ _FX VOID File_SavePathTree_internal(LIST* Root, const WCHAR* name)
 
     Dll_Free(Path);
 
-    CloseHandle(hPathsFile);
+    NtClose(hPathsFile);
 }
 
 
@@ -419,6 +435,8 @@ _FX BOOLEAN File_SavePathTree()
     EnterCriticalSection(File_PathRoot_CritSec);
 
     File_SavePathTree_internal(&File_PathRoot, FILE_PATH_FILE_NAME);
+
+    File_GetAttributes_internal(FILE_PATH_FILE_NAME, &File_PathsFileSize, &File_PathsFileDate, NULL);
 
     LeaveCriticalSection(File_PathRoot_CritSec);
 
@@ -470,14 +488,18 @@ _FX BOOLEAN File_LoadPathTree_internal(LIST* Root, const WCHAR* name)
     wcscpy(PathsFile, Dll_BoxFilePath);
     wcscat(PathsFile, L"\\");
     wcscat(PathsFile, name);
-    SbieDll_TranslateNtToDosPath(PathsFile);
+
+    UNICODE_STRING objname;
+    RtlInitUnicodeString(&objname, PathsFile);
+
+    OBJECT_ATTRIBUTES objattrs;
+    InitializeObjectAttributes(&objattrs, &objname, OBJ_CASE_INSENSITIVE, NULL, NULL);
 
     HANDLE hPathsFile;
-    hPathsFile = CreateFile(PathsFile, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (hPathsFile == INVALID_HANDLE_VALUE) {
-        hPathsFile = CreateFile(PathsFile, FILE_APPEND_DATA, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-        if (hPathsFile != INVALID_HANDLE_VALUE)
-            CloseHandle(hPathsFile);
+    IO_STATUS_BLOCK IoStatusBlock;
+    if (!NT_SUCCESS(NtCreateFile(&hPathsFile, GENERIC_READ | SYNCHRONIZE, &objattrs, &IoStatusBlock, NULL, 0, FILE_SHARE_READ, FILE_OPEN, FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE, NULL, 0))) {
+        if (NT_SUCCESS(NtCreateFile(&hPathsFile, GENERIC_WRITE | SYNCHRONIZE, &objattrs, &IoStatusBlock, NULL, 0, FILE_SHARE_READ, FILE_CREATE, FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE, NULL, 0)))
+            NtClose(hPathsFile);
         return FALSE;
     }
 
@@ -524,7 +546,7 @@ _FX BOOLEAN File_LoadPathTree_internal(LIST* Root, const WCHAR* name)
 
     Dll_Free(Buffer);
 
-    CloseHandle(hPathsFile);
+    NtClose(hPathsFile);
 
     return TRUE;
 }
@@ -558,18 +580,22 @@ _FX BOOLEAN File_LoadPathTree()
 
 _FX VOID File_RefreshPathTree()
 {
-    if (!File_BoxRootWatcher)
-        return;
+    if (File_TestBoxRootChange(0)) {
 
-    if (WaitForSingleObject(File_BoxRootWatcher, 0) == WAIT_OBJECT_0) {
+        ULONG64 PathsFileSize = 0;
+        ULONG64 PathsFileDate = 0;
+        if (File_GetAttributes_internal(FILE_PATH_FILE_NAME, &PathsFileSize, &PathsFileDate, NULL)
+            && (File_PathsFileSize != PathsFileSize || File_PathsFileDate != PathsFileDate)) {
 
-        //
-        // something changed, reload the path tree
-        //
+            File_PathsFileSize = PathsFileSize;
+            File_PathsFileDate = PathsFileDate;
 
-        File_LoadPathTree();
+            //
+            // something changed, reload the path tree
+            //
 
-        FindNextChangeNotification(File_BoxRootWatcher); // rearm the watcher
+            File_LoadPathTree();
+        }
     }
 }
 
@@ -592,15 +618,76 @@ _FX BOOLEAN File_InitDelete_v2()
 //    File_SavePathTree();
 //#endif
 
-    WCHAR BoxFilePath[MAX_PATH] = { 0 };
-    wcscpy(BoxFilePath, Dll_BoxFilePath);
-    SbieDll_TranslateNtToDosPath(BoxFilePath);
+    File_GetAttributes_internal(FILE_PATH_FILE_NAME, &File_PathsFileSize, &File_PathsFileDate, NULL);
 
-    File_BoxRootWatcher = FindFirstChangeNotification(BoxFilePath, FALSE, FILE_NOTIFY_CHANGE_SIZE | FILE_NOTIFY_CHANGE_LAST_WRITE);
-
-    FindNextChangeNotification(File_BoxRootWatcher); // arm the watcher
+    File_InitBoxRootWatcher();
 
     return TRUE;
+}
+
+
+//---------------------------------------------------------------------------
+// File_InitBoxRootWatcher
+//---------------------------------------------------------------------------
+
+
+_FX BOOL File_InitBoxRootWatcher()
+{
+    if (File_BoxRootWatcher)
+        return TRUE; // already initialized
+
+    UNICODE_STRING objname;
+    RtlInitUnicodeString(&objname, Dll_BoxFilePath);
+
+    OBJECT_ATTRIBUTES objattrs;
+    InitializeObjectAttributes(&objattrs, &objname, OBJ_CASE_INSENSITIVE, NULL, NULL);
+
+    HANDLE FileHandle;
+    IO_STATUS_BLOCK IoStatusBlock;
+    if (NT_SUCCESS(NtOpenFile(&FileHandle, FILE_READ_DATA | SYNCHRONIZE, &objattrs, &IoStatusBlock, FILE_SHARE_VALID_FLAGS, FILE_DIRECTORY_FILE | FILE_OPEN_FOR_BACKUP_INTENT))) {
+
+        // IoStatusBlock MUST be static/global because NtNotifyChangeDirectoryFile works asynchronously.
+        // It may write into io after the function has left, which may result in all sorts of memory corruption.
+        if (NT_SUCCESS(NtNotifyChangeDirectoryFile(FileHandle, NULL, NULL, NULL, &File_NotifyIosb, File_NotifyInfo, sizeof(File_NotifyInfo), FILE_NOTIFY_CHANGE_SIZE | FILE_NOTIFY_CHANGE_LAST_WRITE, FALSE))) {
+
+            File_BoxRootWatcher = FileHandle;
+
+            //FindNextChangeNotification(File_BoxRootWatcher);  // arm the watcher
+            NtNotifyChangeDirectoryFile(File_BoxRootWatcher, NULL, NULL, NULL, &File_NotifyIosb, File_NotifyInfo, sizeof(File_NotifyInfo), 3u, 1u);
+
+            return TRUE;
+        }
+        else
+            NtClose(FileHandle);
+    }
+    return FALSE;
+}
+
+
+//---------------------------------------------------------------------------
+// File_TestBoxRootChange
+//---------------------------------------------------------------------------
+
+
+_FX BOOL File_TestBoxRootChange(ULONG WatchBit)
+{
+    if (!File_BoxRootWatcher)
+        return FALSE; // not initialized
+
+    LARGE_INTEGER Timeout = { 0 };
+    if(NtWaitForSingleObject(File_BoxRootWatcher, 0, &Timeout) == WAIT_OBJECT_0) {
+    //if (WaitForSingleObject(File_BoxRootWatcher, 0) == WAIT_OBJECT_0) {
+
+        File_BoxRootChangeBits = -1; // set all bits
+
+        //FindNextChangeNotification(File_BoxRootWatcher); // rearm the watcher
+        NtNotifyChangeDirectoryFile(File_BoxRootWatcher, NULL, NULL, NULL, &File_NotifyIosb, File_NotifyInfo, sizeof(File_NotifyInfo), 3u, 1u);
+    }
+
+    ULONG WatchMask = 1 << WatchBit;
+    BOOL bRet = (File_BoxRootChangeBits & WatchMask) != 0; // check requested bit
+    File_BoxRootChangeBits &= ~WatchMask; // clear requested bit
+    return bRet;
 }
 
 
@@ -611,7 +698,7 @@ _FX BOOLEAN File_InitDelete_v2()
 
 _FX BOOLEAN File_MarkDeleted_internal(LIST* Root, const WCHAR* Path)
 {
-    // 1. remove deleted branche
+    // 1. remove deleted branch
 
     LIST* Parent = NULL;
     PATH_NODE* Node = File_FindPathBranche_internal(Root, Path, &Parent, FALSE);
@@ -705,7 +792,7 @@ _FX BOOLEAN File_HasDeleted_v2(const WCHAR* TruePath)
 
 _FX VOID File_SetRelocation_internal(LIST* Root, const WCHAR *OldTruePath, const WCHAR *NewTruePath)
 {
-    // 1. separate branche from OldTruePath
+    // 1. separate branch from OldTruePath
     
     LIST* Parent = NULL;
     PATH_NODE* Node = File_FindPathBranche_internal(Root, OldTruePath, &Parent, FALSE);
@@ -745,7 +832,7 @@ _FX VOID File_SetRelocation_internal(LIST* Root, const WCHAR *OldTruePath, const
     wcscpy(NewNode->relocation, OldTruePath);
     
 
-    // 5. reatach branche to NewTruePath
+    // 5. reatach branch to NewTruePath
 
     if (Node) {
         PATH_NODE* child = List_Head(&Node->items);
@@ -820,3 +907,18 @@ _FX WCHAR* File_GetRelocation(const WCHAR *TruePath)
     return NULL;
 }
 
+
+//---------------------------------------------------------------------------
+// File_GetAttributes_internal
+//---------------------------------------------------------------------------
+
+
+BOOL File_GetAttributes_internal(const WCHAR *name, ULONG64 *size, ULONG64 *date, ULONG *attrs)
+{
+    WCHAR PathsFile[MAX_PATH] = { 0 };
+    wcscpy(PathsFile, Dll_BoxFilePath);
+    wcscat(PathsFile, L"\\");
+    wcscat(PathsFile, name);
+
+    return SbieDll_QueryFileAttributes(PathsFile, size, date, attrs);
+}

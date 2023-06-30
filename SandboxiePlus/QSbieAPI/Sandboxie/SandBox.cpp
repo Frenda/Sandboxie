@@ -47,7 +47,7 @@ CSandBox::CSandBox(const QString& BoxName, class CSbieAPI* pAPI) : CSbieIni(BoxN
 
 	// when loading a sandbox that is not initialized, initialize it
 	int cfglvl = GetNum("ConfigLevel");
-	if (cfglvl >= 9)
+	if (cfglvl >= 10)
 		return;
 
 	if (cfglvl == 0)
@@ -106,7 +106,16 @@ CSandBox::CSandBox(const QString& BoxName, class CSbieAPI* pAPI) : CSbieIni(BoxN
 		}
 	}
 
-	SetNum("ConfigLevel", 9);
+	if (cfglvl < 10)
+	{
+		// starting with 5.62.3 OpenProtectedStorage is a template
+		if (GetBool("OpenProtectedStorage")) {
+			DelValue("OpenProtectedStorage");
+			InsertText("Template", "OpenProtectedStorage");
+		}
+	}
+
+	SetNum("ConfigLevel", 10);
 }
 
 CSandBox::~CSandBox()
@@ -125,13 +134,13 @@ void CSandBox::SetBoxPaths(const QString& FilePath, const QString& RegPath, cons
 	m_IpcPath = IpcPath;
 }
 
-SB_STATUS CSandBox::RunStart(const QString& Command, bool Elevated)
+SB_STATUS CSandBox::RunStart(const QString& Command, bool Elevated, const QString& WorkingDir)
 {
 #ifdef _DEBUG
 	if ((QGuiApplication::queryKeyboardModifiers() & Qt::ControlModifier) != 0)
 		return RunSandboxed(Command);
 #endif
-	return m_pAPI->RunStart(m_Name, Command, Elevated);
+	return m_pAPI->RunStart(m_Name, Command, Elevated, WorkingDir);
 }
 
 SB_STATUS CSandBox::RunSandboxed(const QString& Command)
@@ -260,7 +269,7 @@ QString CSandBox::Expand(const QString& Value)
 {
 	QString Value2 = Value;
 
-	QRegularExpression rx("%([a-zA-Z0-9 ]+)%");
+	QRegularExpression rx("%([\\{\\}\\-a-zA-Z0-9 ]+)%");
 	for (int pos = 0; ; ) {
 		auto result = rx.match(Value, pos);
 		if (!result.hasMatch())
@@ -283,11 +292,11 @@ QString CSandBox::Expand(const QString& Value)
 	return Value2;
 }
 
-QList<SBoxSnapshot> CSandBox::GetSnapshots(QString* pCurrent, QString* pDefault) const
+QMap<QString, SBoxSnapshot> CSandBox::GetSnapshots(QString* pCurrent, QString* pDefault) const
 {
 	QSettings ini(m_FilePath + "\\Snapshots.ini", QSettings::IniFormat);
 
-	QList<SBoxSnapshot> Snapshots;
+	QMap<QString, SBoxSnapshot> Snapshots;
 
 	foreach(const QString& Snapshot, ini.childGroups())
 	{
@@ -302,7 +311,7 @@ QList<SBoxSnapshot> CSandBox::GetSnapshots(QString* pCurrent, QString* pDefault)
 		BoxSnapshot.InfoStr = ini.value(Snapshot + "/Description").toString();
 		BoxSnapshot.SnapDate = QDateTime::fromSecsSinceEpoch(ini.value(Snapshot + "/SnapshotDate").toULongLong());
 
-		Snapshots.append(BoxSnapshot);
+		Snapshots.insert(BoxSnapshot.ID, BoxSnapshot);
 	}
 
 	if(pCurrent)

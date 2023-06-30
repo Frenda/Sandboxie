@@ -226,6 +226,7 @@ PSECURITY_DESCRIPTOR Secure_NormalSD = NULL;
 
 PSECURITY_DESCRIPTOR Secure_EveryoneSD = NULL;
 
+BOOLEAN Secure_ShouldFakeRunningAsAdmin = FALSE;
 BOOLEAN Secure_IsInternetExplorerTabProcess = FALSE;
 BOOLEAN Secure_Is_IE_NtQueryInformationToken = FALSE;
 
@@ -404,26 +405,20 @@ _FX BOOLEAN Secure_Init(void)
         && (_wcsicmp(Dll_ImageName, L"msedge.exe") != 0); // never for msedge.exe
 
 
-    if (Secure_FakeAdmin || Dll_OsBuild >= 9600) {
+    void* NtAccessCheckByType = GetProcAddress(Dll_Ntdll, "NtAccessCheckByType");
+    void* NtAccessCheck = GetProcAddress(Dll_Ntdll, "NtAccessCheck");
+    void* NtQuerySecurityAttributesToken = GetProcAddress(Dll_Ntdll, "NtQuerySecurityAttributesToken");
+    void* NtQueryInformationToken = GetProcAddress(Dll_Ntdll, "NtQueryInformationToken");
+    void* NtAccessCheckByTypeResultList = GetProcAddress(Dll_Ntdll, "NtAccessCheckByTypeResultList");
 
-        void* NtAccessCheckByType = GetProcAddress(Dll_Ntdll, "NtAccessCheckByType");
-        void* NtAccessCheck = GetProcAddress(Dll_Ntdll, "NtAccessCheck");
-        void* NtQuerySecurityAttributesToken = GetProcAddress(Dll_Ntdll, "NtQuerySecurityAttributesToken");
-        void* NtQueryInformationToken = GetProcAddress(Dll_Ntdll, "NtQueryInformationToken");
-        void* NtAccessCheckByTypeResultList = GetProcAddress(Dll_Ntdll, "NtAccessCheckByTypeResultList");
-        
-
-        SBIEDLL_HOOK(Ldr_, NtQuerySecurityAttributesToken);
-        SBIEDLL_HOOK(Ldr_, NtAccessCheckByType);
-        SBIEDLL_HOOK(Ldr_, NtAccessCheck);
-        SBIEDLL_HOOK(Ldr_, NtAccessCheckByTypeResultList);
-        SBIEDLL_HOOK(Ldr_, NtQueryInformationToken);
-    }
+    SBIEDLL_HOOK(Ldr_, NtQuerySecurityAttributesToken);
+    SBIEDLL_HOOK(Ldr_, NtAccessCheckByType);
+    SBIEDLL_HOOK(Ldr_, NtAccessCheck);
+    SBIEDLL_HOOK(Ldr_, NtAccessCheckByTypeResultList);
+    SBIEDLL_HOOK(Ldr_, NtQueryInformationToken);
     
     if (Dll_OsBuild >= 9600) { // Windows 8.1 and later
-        if (DLL_IMAGE_GOOGLE_CHROME == Dll_ImageType) {
-            SBIEDLL_HOOK(Ldr_, NtOpenThreadToken);
-        }
+        SBIEDLL_HOOK(Ldr_, NtOpenThreadToken);
     }
 
     //
@@ -444,16 +439,17 @@ _FX BOOLEAN Secure_Init(void)
 
     if (RtlQueryElevationFlags) {
 
-        BOOLEAN ShouldFakeRunningAsAdmin = Secure_FakeAdmin
-                ||  Dll_ImageType == DLL_IMAGE_SANDBOXIE_SBIESVC
+        SBIEDLL_HOOK(Secure_,RtlQueryElevationFlags);
+
+        // $Workaround$ - 3rd party fix
+        Secure_ShouldFakeRunningAsAdmin = 
+                    Dll_ImageType == DLL_IMAGE_SANDBOXIE_SBIESVC
                 ||  Dll_ImageType == DLL_IMAGE_SANDBOXIE_RPCSS
                 ||  Dll_ImageType == DLL_IMAGE_INTERNET_EXPLORER
                 ||  (_wcsicmp(Dll_ImageName, L"SynTPEnh.exe") == 0)
                 ||  (_wcsicmp(Dll_ImageName, L"SynTPHelper.exe") == 0);
 
-        if (ShouldFakeRunningAsAdmin) {
-
-            SBIEDLL_HOOK(Secure_,RtlQueryElevationFlags);
+        if (Secure_ShouldFakeRunningAsAdmin) {
 
             //
             // if this is an Internet Explorer tab process then we always
@@ -489,17 +485,22 @@ _FX BOOLEAN Secure_Init(void)
 
     RtlCheckTokenMembershipEx =
         GetProcAddress(Dll_Ntdll, "RtlCheckTokenMembershipEx");
-
     if (RtlCheckTokenMembershipEx) {
-
-        if (Secure_FakeAdmin) {
-
-            SBIEDLL_HOOK(Secure_, RtlCheckTokenMembershipEx);
-        }
-
+        SBIEDLL_HOOK(Secure_, RtlCheckTokenMembershipEx);
     }
 
     return TRUE;
+}
+
+
+//---------------------------------------------------------------------------
+// SbieDll_SetFakeAdmin
+//---------------------------------------------------------------------------
+
+
+_FX VOID SbieDll_SetFakeAdmin(BOOLEAN FakeAdmin)
+{
+    Secure_FakeAdmin = FakeAdmin;
 }
 
 
@@ -1108,14 +1109,16 @@ NTSTATUS Ldr_NtAccessCheckByType(PSECURITY_DESCRIPTOR SecurityDescriptor, PSID P
     NTSTATUS rc;
     HANDLE hTokenReal = NULL;
 
-    // todo: is that right? It seems wrong
-    if (Dll_ImageType == DLL_IMAGE_SANDBOXIE_BITS ||
-        Dll_ImageType == DLL_IMAGE_SANDBOXIE_WUAU ||
-        Dll_ImageType == DLL_IMAGE_WUAUCLT) {
-        *GrantedAccess = 0xFFFFFFFF;
-        *AccessStatus = TRUE;
-        SetLastError(0);
-        return TRUE;
+    if (Dll_OsBuild >= 9600) {
+        // todo: is that right? It seems wrong
+        if (Dll_ImageType == DLL_IMAGE_SANDBOXIE_BITS ||
+            Dll_ImageType == DLL_IMAGE_SANDBOXIE_WUAU ||
+            Dll_ImageType == DLL_IMAGE_WUAUCLT) {
+            *GrantedAccess = 0xFFFFFFFF;
+            *AccessStatus = TRUE;
+            SetLastError(0);
+            return TRUE;
+        }
     }
     
     Ldr_TestToken(ClientToken, &hTokenReal, TRUE);
@@ -1182,7 +1185,7 @@ BOOL Ldr_NtOpenThreadToken(HANDLE ThreadHandle, DWORD DesiredAccess, BOOL OpenAs
     BOOL rc;
 
     rc = __sys_NtOpenThreadToken(ThreadHandle, DesiredAccess, OpenAsSelf, TokenHandle);
-    if (rc == STATUS_ACCESS_DENIED && OpenAsSelf) {
+    if (DLL_IMAGE_GOOGLE_CHROME == Dll_ImageType && rc == STATUS_ACCESS_DENIED && OpenAsSelf) {
         rc = __sys_NtOpenThreadToken(ThreadHandle, DesiredAccess, 0, TokenHandle);
     }
     return rc;
@@ -1257,8 +1260,8 @@ _FX NTSTATUS Secure_NtDuplicateToken(
     _Out_ PHANDLE NewTokenHandle)
 {
     //
-    // on windows 11 MSIServer fails to duplicte its impersonation token when using it
-    // so we drop the impersonation, do the duplication and re impersonate
+    // on Windows 11, MSIServer fails to duplicate its impersonation token when using it
+    // so we drop the impersonation, do the duplication and re-impersonate
     //
 
     HANDLE hToken = NULL;
@@ -1332,64 +1335,72 @@ _FX NTSTATUS Secure_RtlQueryElevationFlags(ULONG *Flags)
     // - InstallerDetectEnabled (0x04) - Detection of installers
     //
 
-    BOOLEAN fake = Secure_FakeAdmin; // FALSE;
+    BOOLEAN fake = FALSE;
 
-    if (Dll_ImageType == DLL_IMAGE_INTERNET_EXPLORER) {
-
-        //
-        // RtlQueryElevationFlags hook for Internet Explorer:
-        //
-        // if the check occurs during CreateProcess, then return the real
-        // elevation flags, so UAC elevation may occur for the new process.
-        //
-        // otherwise, this check is related to Protected Mode, so pretend
-        // there is no need to elevate
-        //
-
-        if (! TlsData->proc_create_process)
-            fake = TRUE;
-
-    } else if (Dll_ImageType == DLL_IMAGE_SANDBOXIE_SBIESVC) {
-
-        //
-        // RtlQueryElevationFlags hook for SbieSvc UAC elevation process:
-        //
-        // even when running as Administrator, in some cases the
-        // kernel32!CheckElevationEnabled function (called by
-        // kernel32!kernel32!CreateProcessInternalW) will decide that
-        // elevation is required for some EXEs, and fail CreateProcess
-        // with ERROR_ELEVATION_REQUIRED.  this will cause SH32_DoRunAs
-        // to run and invoke ShellExecuteEx/runas, which will result in
-        // another invocation of CreateProcess, and an infinite loop.
-        //
-        // to work around this problem, we need to turn off the bit
-        // InstallerDetectEnabled (returning zero flags is also ok), as
-        // this disables the checks in kernel32!CheckElevationEnabled
-        //
-        // we do this only for the SbieSvc UAC elevator process, because
-        // we know that process is already running as Administrator.
-        //
-
-        if (TlsData->proc_create_process)
-            fake = TRUE;
-
-    } else {
-
-        //
-        // RtlQueryElevationFlags hook for anything else:
-        //
-        // - SandboxieRpcSs, which is used to run elevated COM objects,
-        // for example the Internet Explorer Protected Mode ActiveX
-        // Installation Broker, or elevated Control Panel applets.
-        // we return zero flags and the COM object runs without elevation.
-        //
-        // - a couple of Synaptics programs, which reportedly caused
-        // UAC prompts, and seem to run well without actually elevating
-        //
-        // pretend there is no need to elevate
-        //
-
+    if (Secure_FakeAdmin) 
+    {
         fake = TRUE;
+    } 
+    else if (Secure_ShouldFakeRunningAsAdmin) {
+
+        if (Dll_ImageType == DLL_IMAGE_INTERNET_EXPLORER) {
+
+            //
+            // RtlQueryElevationFlags hook for Internet Explorer:
+            //
+            // if the check occurs during CreateProcess, then return the real
+            // elevation flags, so UAC elevation may occur for the new process.
+            //
+            // otherwise, this check is related to Protected Mode, so pretend
+            // there is no need to elevate
+            //
+
+            if (! TlsData->proc_create_process)
+                fake = TRUE;
+
+        } else if (Dll_ImageType == DLL_IMAGE_SANDBOXIE_SBIESVC) {
+
+            //
+            // RtlQueryElevationFlags hook for SbieSvc UAC elevation process:
+            //
+            // even when running as Administrator, in some cases the
+            // kernel32!CheckElevationEnabled function (called by
+            // kernel32!kernel32!CreateProcessInternalW) will decide that
+            // elevation is required for some EXEs, and fail CreateProcess
+            // with ERROR_ELEVATION_REQUIRED.  this will cause SH32_DoRunAs
+            // to run and invoke ShellExecuteEx/runas, which will result in
+            // another invocation of CreateProcess, and an infinite loop.
+            //
+            // to work around this problem, we need to turn off the bit
+            // InstallerDetectEnabled (returning zero flags is also ok), as
+            // this disables the checks in kernel32!CheckElevationEnabled
+            //
+            // we do this only for the SbieSvc UAC elevator process, because
+            // we know that process is already running as Administrator.
+            //
+
+            if (TlsData->proc_create_process)
+                fake = TRUE;
+
+        } else {
+
+            //
+            // RtlQueryElevationFlags hook for anything else:
+            //
+            // - SandboxieRpcSs, which is used to run elevated COM objects,
+            // for example the Internet Explorer Protected Mode ActiveX
+            // Installation Broker, or elevated Control Panel applets.
+            // we return zero flags and the COM object runs without elevation.
+            //
+            // - a couple of Synaptics programs, which reportedly caused
+            // UAC prompts, and seem to run well without actually elevating
+            //
+            // pretend there is no need to elevate
+            //
+
+            fake = TRUE;
+        }
+
     }
 
     //
@@ -1411,7 +1422,7 @@ _FX NTSTATUS Secure_RtlQueryElevationFlags(ULONG *Flags)
 
 
 //---------------------------------------------------------------------------
-// Secure_IsRestrictedToken
+// Secure_RtlCheckTokenMembershipEx
 //---------------------------------------------------------------------------
 
 NTSTATUS Secure_RtlCheckTokenMembershipEx(
@@ -1503,6 +1514,39 @@ _FX BOOLEAN Secure_IsRestrictedToken(BOOLEAN CheckThreadToken)
     }
 
     return return_value;
+}
+
+
+//---------------------------------------------------------------------------
+// Secure_IsRestrictedToken
+//---------------------------------------------------------------------------
+
+
+_FX BOOLEAN Secure_IsAppContainerToken(HANDLE hToken)
+{
+    BOOLEAN ret = FALSE;
+    BOOL bClose = FALSE;
+
+    if (Dll_OsBuild >= 9600) { // Windows 8.1 and later
+
+        if (hToken == NULL) {
+            if (!NT_SUCCESS(NtOpenProcessToken(NtCurrentProcess(), TOKEN_QUERY, &hToken)))
+                return ret;
+            bClose = TRUE;
+        }
+
+        ULONG returnLength = 0;
+        BYTE appContainerBuffer[0x80];
+        if (NT_SUCCESS(NtQueryInformationToken(hToken, (TOKEN_INFORMATION_CLASS)TokenAppContainerSid, appContainerBuffer, sizeof(appContainerBuffer), &returnLength))) {
+            PTOKEN_APPCONTAINER_INFORMATION appContainerInfo = (PTOKEN_APPCONTAINER_INFORMATION)appContainerBuffer;
+            ret = appContainerInfo->TokenAppContainer != NULL;
+        }
+
+        if (bClose)
+            NtClose(hToken);
+    }
+
+    return ret;
 }
 
 
@@ -1604,7 +1648,7 @@ _FX BOOLEAN Secure_IsLocalSystemToken(BOOLEAN CheckThreadToken)
 
 _FX BOOLEAN Secure_IsSameBox(HANDLE idProcess)
 {
-    WCHAR boxname[48];
+    WCHAR boxname[BOXNAME_COUNT];
     ULONG session_id;
     NTSTATUS status =
         SbieApi_QueryProcess(idProcess, boxname, NULL, NULL, &session_id);

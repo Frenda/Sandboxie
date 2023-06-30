@@ -1,6 +1,6 @@
 /*
  * 
- * Copyright (c) 2020, David Xanatos
+ * Copyright (c) 2020-2023, David Xanatos
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -78,7 +78,7 @@ public:
 	virtual bool			GetProcessExemption(quint32 process_id, quint32 action_id);
 
 	virtual QString			GetBoxedPath(const QString& BoxName, const QString& Path);
-	virtual QString			GetBoxedPath(CSandBox* pBox, const QString& Path);
+	virtual QString			GetBoxedPath(CSandBox* pBox, const QString& Path, const QString& Snapshot = QString());
 	virtual QString			GetRealPath(CSandBox* pBox, const QString& Path);
 
 	enum ESetMode
@@ -94,6 +94,7 @@ public:
 	virtual SB_STATUS		ReloadCert();
 	virtual void			CommitIniChanges();
 	virtual QString			SbieIniGet(const QString& Section, const QString& Setting, quint32 Index = 0, qint32* ErrCode = NULL);
+	virtual QString			SbieIniGet2(const QString& Section, const QString& Setting, quint32 Index = 0, bool bWithGlobal = false, bool bNoExpand = true, bool withTemplates = false);
 	virtual QString			SbieIniGetEx(const QString& Section, const QString& Setting);
 	virtual SB_STATUS		SbieIniSet(const QString& Section, const QString& Setting, const QString& Value, ESetMode Mode = eIniUpdate, bool bRefresh = true);
 	virtual bool			IsBox(const QString& BoxName, bool& bIsEnabled);
@@ -130,11 +131,13 @@ public:
 	virtual SB_STATUS		EnableMonitor(bool Enable);
 	virtual bool			IsMonitoring();
 
-	virtual void			AddTraceEntry(const CTraceEntryPtr& LogEntry, bool bCanMerge = false);
-	virtual QVector<CTraceEntryPtr> GetTrace() const;
-	virtual void			ClearTrace() { QWriteLocker Lock(&m_TraceMutex); m_TraceList.clear(); m_LastTraceEntry = 0; }
+	virtual const QVector<CTraceEntryPtr>& GetTrace();
+	virtual int				GetTraceCount() const { return m_TraceList.count(); }
+	virtual void			ClearTrace() { m_TraceList.clear(); QMutexLocker Lock(&m_TraceMutex); m_TraceCache.clear(); }
 
 	// Other
+	virtual quint64			QueryProcessInfo(quint32 ProcessId, quint32 InfoClass = 0);
+
 	virtual QString			GetSbieMsgStr(quint32 code, quint32 Lang = 1033);
 
 	virtual SB_STATUS		RunStart(const QString& BoxName, const QString& Command, bool Elevated = false, const QString& WorkingDir = QString(), QProcess* pProcess = NULL);
@@ -166,7 +169,7 @@ signals:
 	void					ConfigReloaded();
 	//void					LogMessage(const QString& Message, bool bNotify = true);
 	void					LogSbieMessage(quint32 MsgCode, const QStringList& MsgData, quint32 ProcessId);
-	void					ProcessBoxed(quint32 ProcessId, const QString& Path, const QString& Box, quint32 ParentId);
+	void					ProcessBoxed(quint32 ProcessId, const QString& Path, const QString& Box, quint32 ParentId, const QString& CmdLine);
 	void					FileToRecover(const QString& BoxName, const QString& FilePath, const QString& BoxPath, quint32 ProcessId);
 
 	void					BoxAdded(const CSandBoxPtr& pBox);
@@ -181,7 +184,7 @@ protected slots:
 	//virtual void			OnMonitorEntry(quint32 ProcessId, quint32 Type, const QString& Value);
 	virtual void			OnIniChanged(const QString &path);
 	virtual void			OnReloadConfig();
-	virtual CBoxedProcessPtr OnProcessBoxed(quint32 ProcessId, const QString& Path, const QString& Box, quint32 ParentId);
+	virtual CBoxedProcessPtr OnProcessBoxed(quint32 ProcessId, const QString& Path, const QString& Box, quint32 ParentId, const QString& CmdLine);
 
 protected:
 	friend class CSandBox;
@@ -202,8 +205,6 @@ protected:
 	virtual bool			GetLog();
 	virtual bool			GetMonitor();
 
-	virtual quint32			QueryProcessInfo(quint32 ProcessId, quint32 InfoClass = 0);
-
 	virtual SB_STATUS		TerminateAll(const QString& BoxName);
 	virtual SB_STATUS		Terminate(quint32 ProcessId);
 
@@ -222,9 +223,9 @@ protected:
 	QMap<QString, CSandBoxPtr> m_SandBoxes;
 	QMap<quint32, CBoxedProcessPtr> m_BoxedProxesses;
 
-	mutable QReadWriteLock	m_TraceMutex;
+	mutable QMutex			m_TraceMutex;
+	QVector<CTraceEntryPtr>	m_TraceCache;
 	QVector<CTraceEntryPtr>	m_TraceList;
-	int						m_LastTraceEntry;
 
 	mutable QReadWriteLock	m_DriveLettersMutex;
 	struct SDrive
@@ -259,11 +260,39 @@ protected:
 	QString					m_PublicDir;
 	QString					m_UserDir;
 
+public:
+	
+	struct SScopedVoid {
+		~SScopedVoid()					{ if (ptr) free(ptr); }
+
+		inline void Assign(void* p)		{Q_ASSERT(!ptr); ptr = p;}
+
+	protected:
+		SScopedVoid(void* p) : ptr(p)	{}
+		void* ptr;
+	};
+
+	template <typename T>
+	struct SScoped : public SScopedVoid {
+		SScoped(void* p = NULL) : SScopedVoid(p) {}
+
+		inline T* Detache()				{T* p = ptr; ptr = NULL; return p;}
+		inline T* Value()				{return (T*)ptr;}
+		inline T* operator->() const	{return (T*)ptr;}
+		inline T& operator*() const     {return *((T*)ptr);}
+		inline operator T*() const		{return (T*)ptr;}
+
+	private:
+		SScoped(const SScoped& other)	{} // copying is explicitly forbidden
+		SScoped<T>& operator=(T* p)	{return *this;}
+		SScoped<T>& operator=(const SScoped<T>& other)	{return *this;}
+	};
+
 private:
 	mutable QMutex			m_ThreadMutex;
 	mutable QWaitCondition	m_ThreadWait;
 
-	SB_STATUS CallServer(void* req, void* rpl) const;
+	SB_STATUS CallServer(void* req, SScopedVoid* prpl) const;
 	SB_STATUS SbieIniSet(void *RequestBuf, void *pPasswordWithinRequestBuf, const QString& SectionName, const QString& SettingName);
 	struct SSbieAPI* m;
 };

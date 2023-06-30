@@ -32,6 +32,7 @@ LicenseFile=.\license.txt
 UsedUserAreasWarning=no
 VersionInfoCopyright=Copyright (C) 2020-2022 by David Xanatos (xanasoft.com)
 VersionInfoVersion={#MyAppVersion}
+SetupIconFile=SandManInstall.ico
 
 ; Handled in code section as always want DirPage for portable mode.
 DisableDirPage=no
@@ -53,6 +54,7 @@ Name: "RefreshBuild"; Description: "{cm:RefreshBuild}"; MinVersion: 0.0,5.0; Che
 Source: ".\Release\{#MyAppSrc}\*"; DestDir: "{app}"; MinVersion: 0.0,5.0; Flags: recursesubdirs ignoreversion; Excludes: "*.pdb"
 ; include the driver pdb
 Source: ".\Release\{#MyAppSrc}\SbieDrv.pdb"; DestDir: "{app}"; MinVersion: 0.0,5.0; Flags: ignoreversion
+Source: ".\Release\{#MyAppSrc}\SbieDll.pdb"; DestDir: "{app}"; MinVersion: 0.0,5.0; Flags: ignoreversion
 
 ; Only if portable.
 Source: ".\Sandboxie.ini"; DestDir: "{app}"; Flags: ignoreversion onlyifdoesntexist; Check: IsPortable
@@ -72,7 +74,7 @@ Name: "{userdesktop}\Sandboxie-Plus"; Filename: "{app}\SandMan.exe"; Tasks: Desk
 
 [INI]
 ; Set Sandman language.
-Filename: "{localappdata}\{#MyAppName}\{#MyAppName}.ini"; Section: "Options"; Key: "UiLanguage"; String: "{code:SandmanLanguage|{language}}"; Check: not IsPortable
+Filename: "{localappdata}\{#MyAppName}\{#MyAppName}.ini"; Section: "Options"; Key: "UiLanguage"; String: "{code:SandmanLanguage|{language}}"; Check: (not IsPortable) and (not IsUpgrade)
 Filename: "{app}\{#MyAppName}.ini"; Section: "Options"; Key: "UiLanguage"; String: "{code:SandmanLanguage|{language}}"; Check: IsPortable
 
 
@@ -106,6 +108,9 @@ Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Services\SbieSvc"; ValueName: "Pre
 ; Set language for Sbie service.
 Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Services\SbieSvc"; ValueType: dword; ValueName: "Language"; ValueData: "{code:SystemLanguage}"; Check: not IsPortable
 
+; Set IniPath for Sbie driver.
+Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Services\SbieDrv"; ValueType: string; ValueName: "IniPath"; ValueData: "{code:GetIniPath}"; Check: IsUpgrade and IsIniPathSet
+
 
 [Run]
 ; Install the Sbie driver.
@@ -121,7 +126,7 @@ Filename: "{app}\UpdUtil.exe"; Parameters: {code:GetParams}; StatusMsg: "UpdUtil
 Filename: "{app}\KmdUtil.exe"; Parameters: "start SbieSvc"; StatusMsg: "KmdUtil start SbieSvc"; Check: not IsPortable
 
 ; Start the Sandman UI.
-Filename: "{app}\Start.exe"; Parameters: "open_agent:sandman.exe"; StatusMsg: "Launch SandMan UI..."; Flags: postinstall nowait; Check: IsOpenSandMan
+Filename: "{app}\Start.exe"; Parameters: "open_agent:sandman.exe"; Description: "Start Sandboxie-Plus UI"; StatusMsg: "Launch SandMan UI..."; Flags: postinstall nowait; Check: IsOpenSandMan
 ;Filename: "{app}\SandMan.exe"; Parameters: "-autorun"; StatusMsg: "Launch SandMan UI..."; Flags: runasoriginaluser nowait; Check: not IsPortable
 
 
@@ -140,7 +145,8 @@ var
   CustomPage: TInputOptionWizardPage;
   IsInstalled: Boolean;
   Portable: Boolean;
-
+  IniPathExist: Boolean;
+  IniPath: String;
 
 function IsPortable(): Boolean;
 begin
@@ -221,6 +227,7 @@ begin
     'dutch': Result := 'nl';
     'french': Result := 'fr';
     'german': Result := 'de';
+    'hungarian': Result := 'hu';
     'italian': Result := 'it';
     'korean': Result := 'ko';
     'polish': Result := 'pl';
@@ -354,7 +361,7 @@ begin
   // Shutdown service, driver and processes as ready to install.
   if ((CurPageID = wpReady) and (not IsPortable())) then
   begin
-    
+
     // Stop processes.
     Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM Sandman.exe /IM SbieCtrl.exe /IM Start.exe /F', '', SW_HIDE, ewWaitUntilTerminated, ExecRet);
 
@@ -454,7 +461,39 @@ begin
       end;
   end;
 
+  begin
+  
+    // Return the path to use for the value of IniPath.
+    if RegQueryStringValue(HKLM, 'SYSTEM\CurrentControlSet\Services\SbieDrv', 'IniPath', IniPath) then
+    begin
+      if Copy(IniPath, 1, 4) = '\??\' then
+      begin
+        IniPathExist := True;
+      end;
+    end;
+  end;
+
   Result := True;
+end;
+
+function IsIniPathSet(): Boolean;
+begin
+
+  // Return True or False for the value of Check.
+  if (IniPathExist) then
+  begin
+      Result := True;
+  end;
+end;
+
+function GetIniPath(Dummy: String): String;
+begin
+
+  // Return the path to use for the value of IniPath.
+  if (IniPathExist) then
+  begin
+      Result := IniPath;
+  end;
 end;
 
 //procedure CurStepChanged(CurStep: TSetupStep);
@@ -464,7 +503,7 @@ end;
 //begin
 //
 //  // after the installation
-//  if (CurStep <> ssPostInstall) then  
+//  if (CurStep <> ssPostInstall) then
 //    exit;
 //
 //  if WizardIsTaskSelected('RefreshBuild') then

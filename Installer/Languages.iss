@@ -13,6 +13,7 @@ Name: "ChineseTraditional"; MessagesFile: "isl\ChineseTraditional.isl"
 Name: "dutch"; MessagesFile: "compiler:Languages\Dutch.isl"
 Name: "french"; MessagesFile: "compiler:Languages\French.isl"
 Name: "german"; MessagesFile: "compiler:Languages\German.isl"
+Name: "hungarian"; MessagesFile: "compiler:Languages\Hungarian.isl"
 Name: "Italian"; MessagesFile: "compiler:Languages\Italian.isl"
 Name: "Korean"; MessagesFile: "isl\Korean.isl"
 Name: "polish"; MessagesFile: "compiler:Languages\Polish.isl"
@@ -135,11 +136,11 @@ dutch.UninstallTaskLabel5=Configuratiebestanden en sandboxen verwijderen%nSelect
 
 ; French
 french.AddSandboxedMenu=Ajouter « Exécuter dans un bac à sable » au menu contextuel
-french.AddSandboxedBrowser=Ajouter un raccourci sur le bureau pour Exécuter le navigateur Internet dans Sandboxie
+french.AddSandboxedBrowser=Ajouter un raccourci sur le bureau pour exécuter le navigateur web dans Sandboxie
 french.SandboxieStartMenu1=Exécuter un programme dans un bac à sable
-french.SandboxieStartMenu2=Exécuter le navigateur Internet dans un bac à sable
-french.SandboxieStartMenu3=Exécuter dans le menu Démarrer
-french.SandboxedBrowser=Lien navigateur Internet dans un bac à sable
+french.SandboxieStartMenu2=Exécuter le navigateur web dans un bac à sable
+french.SandboxieStartMenu3=Menu Démarrer de Sandboxie
+french.SandboxedBrowser=Navigateur web dans un bac à sable
 french.CustomPageLabel1=Sélectionner le type d'installation
 french.CustomPageLabel2=Comment doit-on l'installer ?
 french.CustomPageLabel3=Choisir le mode d'installation
@@ -181,6 +182,29 @@ german.UninstallTaskLabel5=Entferne die Konfiguration und alle &Sandboxen%nWähl
 german.AutoStartProgram=Starte automatisch %1
 german.RefreshBuild=Neueste Templates.ini und Übersetzungen herunterladen
 
+; Hungarian
+hungarian.AddSandboxedMenu=Az "Izolált módú futtatás" hozzáadása a helyi menühöz
+hungarian.AddSandboxedBrowser=Asztali parancsikon hozzáadása a böngésző izolált módú indításához
+hungarian.SandboxieStartMenu1=Bármilyen program futtatása izolált módban
+hungarian.SandboxieStartMenu2=Webböngésző futtatása izolált módban
+hungarian.SandboxieStartMenu3=Sandboxie start menü
+hungarian.SandboxedBrowser=Izolált böngésző
+hungarian.CustomPageLabel1=Válassza ki a telepítés típusát
+hungarian.CustomPageLabel2=Hogyan kell telepíteni?
+hungarian.CustomPageLabel3=Válassza ki a telepítési módot
+hungarian.CustomPageInstallMode=Telepítse a {#MyAppName} alkalmazást erre a számítógépre
+hungarian.CustomPageUpgradeMode=Frissítse a meglévő {#MyAppName} telepítést
+hungarian.CustomPagePortableMode=Csomagolja ki az összes fájlt egy könyvtárba hordozható használatra
+hungarian.RequiresWin7OrLater=Sandboxie-Plus alkalmazáshoz Windows 7 vagy újabb rendszer szükséges.
+hungarian.ClassicFound=A Sandboxie Classic telepítése észlelve, melyet először el kell távolítani. Eltávolítja most?
+hungarian.RunSandboxedMenu=Futtatás izolált módban
+hungarian.UninstallTaskLabel1=Válassza ki az eltávolítás típusát
+hungarian.UninstallTaskLabel2=Hogyan távolítja el a Sandboxie-Plus-t?
+hungarian.UninstallTaskLabel3=A konfigurációs fájlok és homokozók megtartása%nEz a leginkább ajánlott lehetőség, ha a Sandboxie-Plus újratelepítését tervezi, miközben megtartja konfigurációs fájljait és homokozóit.
+hungarian.UninstallTaskLabel4=A konfigurációs fájlok eltávolítása%nVálassza ezt a lehetőséget a Sandboxie.ini és a Sandboxie-Plus.ini konfigurációs fájlok eltávolításához, miközben a homokozók változatlanok maradnak.
+hungarian.UninstallTaskLabel5=A konfigurációs fájlok és homokozók eltávolítása%nVálassza ezt a lehetőséget az összes konfigurációs fájl és homokozó eltávolításához, beleértve a Sandbox mappát is, amely a FileRootPath egyéni elérési útjain található.
+hungarian.RefreshBuild=Töltse le a legújabb Templates.ini-t és a fordításokat
+
 ; Italian
 Italian.AddSandboxedMenu=Aggiungi l'opzione "Avvia nell'area virtuale" al menu contestuale
 Italian.AddSandboxedBrowser=Aggiungi un collegamento sul desktop per l'avvio del browser Web in Sandboxie
@@ -202,6 +226,7 @@ Italian.UninstallTaskLabel2=Come vorresti disinstallare Sandboxie-Plus?
 Italian.UninstallTaskLabel3=&Mantieni i file di configurazione e le aree virtuali%nSelezionare questa opzione se si prevede di reinstallare Sandboxie in un secondo momento, conservando le impostazioni e le aree virtuali.
 Italian.UninstallTaskLabel4=Rimuovi i file di &configurazione%nSelezionare questa opzione per rimuovere i file di configurazione Sandboxie.ini e Sandboxie-Plus.ini, lasciando invariate le aree virtuali presenti.
 Italian.UninstallTaskLabel5=Rimuovi i file di configurazione e le &aree virtuali%nSelezionare questa opzione per rimuovere tutti i file di configurazione e le aree virtuali, inclusa la cartella Sandbox nei percorsi personalizzati mediante FileRootPath.
+Italian.RefreshBuild=Aggiorna Templates.ini e translations.7z
 
 ; Korean
 Korean.AddSandboxedMenu=상황에 맞는 메뉴에 "샌드박스에서 실행" 추가
@@ -270,6 +295,7 @@ brazilianportuguese.UninstallTaskLabel2=Como você gostaria de desinstalar Sandb
 brazilianportuguese.UninstallTaskLabel3=&Manter os arquivos de configuração do sandboxes%nEsta é a opção mais recomendada se você planeja reinstalar o Sandboxie-Plus enquanto mantém seus arquivos de configuração e caixas de areia.
 brazilianportuguese.UninstallTaskLabel4=&Remover arquivos de configuração%nSelecione essa opção para remover os arquivos de configuração Sandboxie.ini e Sandboxie-Plus.ini mantendo as caixas de areia inalteradas.
 brazilianportuguese.UninstallTaskLabel5=Remover arquivos de configuração e &caixas de areia%nSelecione essa opção para remover todos os arquivos de configuração e caixas de areia, incluindo a pasta Sandbox localizada em caminhos personalizados com FileRootPath.
+brazilianportuguese.RefreshBuild=Baixar mais recentes Templates.ini e traduções
 
 ; Portuguese
 portuguese.AddSandboxedMenu=Adicionar "Roda na Caixa de Areia" para o menu de contexto
@@ -292,6 +318,7 @@ portuguese.UninstallTaskLabel2=Como você gostaria de desinstalar Sandboxie-Plus
 portuguese.UninstallTaskLabel3=&Manter os ficheiro de definição do sandboxes%nEsta é a opção mais recomendada se você planeja reinstalar o Sandboxie-Plus enquanto mantém seus ficheiro de definição e caixas de areia.
 portuguese.UninstallTaskLabel4=&Remover ficheiro de definição%nSelecione essa opção para remover os ficheiro de definição Sandboxie.ini e Sandboxie-Plus.ini mantendo as caixas de areia inalteradas.
 portuguese.UninstallTaskLabel5=Remover ficheiro de definição e &caixas de areia%nSelecione essa opção para remover todos os ficheiro de definição e caixas de areia, incluindo a pasta Sandbox localizada em caminhos personalizados com FileRootPath.
+portuguese.RefreshBuild=Descarregar mais novos Templates.ini e traduções
 
 ; Russian
 russian.AddSandboxedMenu=Добавить "Запустить в песочнице" в контекстное меню

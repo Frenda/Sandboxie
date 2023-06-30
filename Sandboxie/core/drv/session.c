@@ -74,6 +74,8 @@ struct _SESSION {
 
 	LOG_BUFFER* monitor_log;
 
+    BOOLEAN monitor_stack_trace;
+
     BOOLEAN monitor_overflow;
 
 };
@@ -112,6 +114,7 @@ static NTSTATUS Session_Api_MonitorPut2(PROCESS *proc, ULONG64 *parms);
 
 static NTSTATUS Session_Api_MonitorGetEx(PROCESS *proc, ULONG64 *parms);
 
+static NTSTATUS Session_Api_MonitorGet2(PROCESS *proc, ULONG64 *parms);
 
 //---------------------------------------------------------------------------
 // Variables
@@ -143,6 +146,7 @@ _FX BOOLEAN Session_Init(void)
     Api_SetFunction(API_MONITOR_PUT2,           Session_Api_MonitorPut2);
     //Api_SetFunction(API_MONITOR_GET,            Session_Api_MonitorGet);
 	Api_SetFunction(API_MONITOR_GET_EX,			Session_Api_MonitorGetEx);
+    Api_SetFunction(API_MONITOR_GET2,            Session_Api_MonitorGet2);
 
 
     return TRUE;
@@ -339,7 +343,7 @@ _FX NTSTATUS Session_Api_Leader(PROCESS *proc, ULONG64 *parms)
         if (proc)
             status = STATUS_NOT_IMPLEMENTED;
         else if (!MyIsCallerSigned()) 
-            status = STATUS_ACCESS_DENIED;
+            status = STATUS_INVALID_SIGNATURE; // STATUS_ACCESS_DENIED
         else {
 
             session = Session_Get(TRUE, -1, &irql);
@@ -551,6 +555,8 @@ _FX void Session_MonitorPutEx(ULONG type, const WCHAR** strings, ULONG* lengths,
 
     if (session->monitor_log) {
 
+        LARGE_INTEGER timestamp = Util_GetTimestamp();
+
 		ULONG pid = (ULONG)hpid;
         ULONG tid = (ULONG)htid;
 
@@ -559,12 +565,20 @@ _FX void Session_MonitorPutEx(ULONG type, const WCHAR** strings, ULONG* lengths,
 			data_len += ((lengths ? lengths [i] : wcslen(strings[i])) + 1) * sizeof(WCHAR);
 
         
-		//[Type 4][PID 4][TID 4][Data n*2]
-		SIZE_T entry_size = 4 + 4 + 4 + data_len;
+		//[Time 8][Type 4][PID 4][TID 4][Data n*2](0xFFFF[ID1][LEN1][DATA1]...[IDn][LENn][DATAn])
+		SIZE_T entry_size = 8 + 4 + 4 + 4 + data_len;
+
+        PVOID backTrace[MAX_STACK_DEPTH];
+        ULONG frames = 0;
+        if (session->monitor_stack_trace) {
+            frames = Util_CaptureStack(backTrace, MAX_STACK_DEPTH);
+            entry_size += sizeof(WCHAR) + sizeof(ULONG) + sizeof(ULONG) + (frames * sizeof(PVOID));
+        }
 
 		CHAR* write_ptr = log_buffer_push_entry((LOG_BUFFER_SIZE_T)entry_size, session->monitor_log, FALSE);
 		if (write_ptr) {
             WCHAR null_char = L'\0';
+            log_buffer_push_bytes((CHAR*)&timestamp.QuadPart, 8, &write_ptr, session->monitor_log);
 			log_buffer_push_bytes((CHAR*)&type, 4, &write_ptr, session->monitor_log);
 			log_buffer_push_bytes((CHAR*)&pid, 4, &write_ptr, session->monitor_log);
             log_buffer_push_bytes((CHAR*)&tid, 4, &write_ptr, session->monitor_log);
@@ -573,6 +587,17 @@ _FX void Session_MonitorPutEx(ULONG type, const WCHAR** strings, ULONG* lengths,
             for (int i = 0; strings[i] != NULL; i++) {
                 log_buffer_push_bytes((CHAR*)strings[i], (lengths ? lengths[i] : wcslen(strings[i])) * sizeof(WCHAR), &write_ptr, session->monitor_log);
                 log_buffer_push_bytes((CHAR*)&null_char, sizeof(WCHAR), &write_ptr, session->monitor_log);
+            }
+
+            if (frames) {
+                WCHAR strings_end = 0xFFFF;
+                log_buffer_push_bytes((CHAR*)&strings_end, sizeof(WCHAR), &write_ptr, session->monitor_log);
+
+                ULONG tag_id = 'STCK';
+                ULONG tag_len = frames * sizeof(PVOID);
+                log_buffer_push_bytes((CHAR*)&tag_id, sizeof(ULONG), &write_ptr, session->monitor_log);
+                log_buffer_push_bytes((CHAR*)&tag_len, sizeof(ULONG), &write_ptr, session->monitor_log);
+                log_buffer_push_bytes((CHAR*)backTrace, frames * sizeof(PVOID), &write_ptr, session->monitor_log);
             }
 		}
         else if (!session->monitor_overflow) {
@@ -665,6 +690,8 @@ _FX NTSTATUS Session_Api_MonitorControl(PROCESS *proc, ULONG64 *parms)
                     InterlockedIncrement(&Session_MonitorCount);
                 } else
                     Log_Msg0(MSG_1201);
+
+                session->monitor_stack_trace = Conf_Get_Boolean(NULL, L"MonitorStackTrace", 0, FALSE);
 
             } else if ((! EnableMonitor) && session->monitor_log) {
 
@@ -923,6 +950,7 @@ _FX NTSTATUS Session_Api_MonitorGetEx(PROCESS* proc, ULONG64* parms)
     API_MONITOR_GET_EX_ARGS* args = (API_MONITOR_GET_EX_ARGS*)parms;
     NTSTATUS status;
     //ULONG* seq_num;
+    LARGE_INTEGER timestamp;
     ULONG* log_type;
     ULONG* log_pid;
     ULONG* log_tid;
@@ -984,7 +1012,8 @@ _FX NTSTATUS Session_Api_MonitorGetEx(PROCESS* proc, ULONG64* parms)
         CHAR* read_ptr = NULL;
         //if (seq_num != NULL)
         //    read_ptr = log_buffer_get_next(*seq_num, session->monitor_log);
-        //else if (session->monitor_log->buffer_size > 0) // for compatibility with older versions we return the oldest entry
+        //else 
+        if (session->monitor_log->buffer_used > 0)
             read_ptr = session->monitor_log->buffer_start_ptr;
 
         if (!read_ptr) {
@@ -1004,7 +1033,9 @@ _FX NTSTATUS Session_Api_MonitorGetEx(PROCESS* proc, ULONG64* parms)
         //	__leave;
         //}
 
-        //[Type 4][PID 4][TID 4][Data n*2]
+        //[Time 8][Type 4][PID 4][TID 4][Data n*2]
+
+        log_buffer_get_bytes((CHAR*)&timestamp.QuadPart, 8, &read_ptr, session->monitor_log);
 
         log_buffer_get_bytes((CHAR*)log_type, 4, &read_ptr, session->monitor_log);
 
@@ -1035,8 +1066,92 @@ _FX NTSTATUS Session_Api_MonitorGetEx(PROCESS* proc, ULONG64* parms)
         //if (seq_num != NULL)
         //    *seq_num = seq_number;
         //else // for compatibility with older versions we fall back to clearing the returned entry
-            log_buffer_pop_entry(session->monitor_log);
+        log_buffer_pop_entry(session->monitor_log);
 
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER) {
+        status = GetExceptionCode();
+    }
+
+    Session_Unlock(irql);
+
+    return status;
+}
+
+//---------------------------------------------------------------------------
+// Session_Api_MonitorGet2
+//---------------------------------------------------------------------------
+
+_FX NTSTATUS Session_Api_MonitorGet2(PROCESS *proc, ULONG64 *parms)
+{
+	API_MONITOR_GET2_ARGS *args = (API_MONITOR_GET2_ARGS *)parms;
+	NTSTATUS status;
+    ULONG buffer_len;
+    UCHAR* buffer_ptr;
+    SESSION* session;
+    KIRQL irql;
+
+    if (proc)
+        return STATUS_NOT_IMPLEMENTED;
+
+    ProbeForRead(args->buffer_len.val, sizeof(ULONG), sizeof(ULONG));
+    buffer_len = *args->buffer_len.val;
+    ProbeForWrite(args->buffer_len.val, sizeof(ULONG), sizeof(ULONG));
+    *args->buffer_len.val = 0;
+
+    ProbeForWrite(args->buffer_ptr.val, buffer_len, sizeof(UCHAR));
+    buffer_ptr = (UCHAR*)args->buffer_ptr.val;
+
+    status = STATUS_SUCCESS;
+
+    session = Session_Get(FALSE, -1, &irql);
+    if (!session)
+        return STATUS_UNSUCCESSFUL;
+
+    __try {
+
+        if (!session->monitor_log) {
+
+            status = STATUS_DEVICE_NOT_READY;
+            __leave;
+        }
+
+        if (session->monitor_log->buffer_used == 0) {
+            if(session->monitor_overflow)
+                session->monitor_overflow = FALSE;
+            status = STATUS_NO_MORE_ENTRIES;
+            __leave;
+        }
+
+        while (session->monitor_log->buffer_used > 0)
+        {
+            CHAR* read_ptr = session->monitor_log->buffer_start_ptr;
+
+            LOG_BUFFER_SIZE_T entry_size = log_buffer_get_size(&read_ptr, session->monitor_log);
+            LOG_BUFFER_SEQ_T seq_number = log_buffer_get_seq_num(&read_ptr, session->monitor_log);
+            if (entry_size > buffer_len - sizeof(LOG_BUFFER_SIZE_T)) {
+                status = STATUS_MORE_ENTRIES;
+                break;
+            }
+
+            *(LOG_BUFFER_SIZE_T*)buffer_ptr = entry_size;
+            buffer_ptr += sizeof(LOG_BUFFER_SIZE_T);
+            buffer_len -= sizeof(LOG_BUFFER_SIZE_T);
+
+            log_buffer_get_bytes((CHAR*)buffer_ptr, entry_size, &read_ptr, session->monitor_log);
+            buffer_ptr += entry_size;
+            buffer_len -= entry_size;
+
+            log_buffer_pop_entry(session->monitor_log);
+        }
+
+        // always terminate with null length
+        *(LOG_BUFFER_SIZE_T*)buffer_ptr = 0;
+        buffer_ptr += sizeof(LOG_BUFFER_SIZE_T);
+        buffer_len -= sizeof(LOG_BUFFER_SIZE_T);
+
+        // return total used buffer length
+        *args->buffer_len.val = (ULONG)(buffer_ptr - (UCHAR*)args->buffer_ptr.val);
     }
     __except (EXCEPTION_EXECUTE_HANDLER) {
         status = GetExceptionCode();

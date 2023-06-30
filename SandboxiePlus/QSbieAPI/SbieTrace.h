@@ -23,17 +23,18 @@
 
 #include "SbieStatus.h"
 
+//#define USE_MERGE_TRACE
 
 class QSBIEAPI_EXPORT CTraceEntry : public QSharedData
 {
 public:
-	CTraceEntry(quint32 ProcessId, quint32 ThreadId, quint32 Type, const QStringList& LogData);
+	CTraceEntry(quint64 Timestamp, quint32 ProcessId, quint32 ThreadId, quint32 Type, const QStringList& LogData, const QVector<quint64>& Stack = QVector<quint64>());
 
 	virtual QString		GetName() const { return m_Name; }
 	virtual QString		GetMessage() const { return m_Message; }
 	virtual quint32		GetProcessId() const { return m_ProcessId; }
 	virtual quint32		GetThreadId() const { return m_ThreadId; }
-	virtual QDateTime	GetTimeStamp() const { return m_TimeStamp; }
+	virtual quint64		GetTimeStamp() const { return m_TimeStamp; }
 
 	virtual quint8		GetType() const { return m_Type.Type; }
 	static QList<quint32>AllTypes();
@@ -44,11 +45,13 @@ public:
 	virtual void		SetProcessName(const QString& name) { m_ProcessName = name; }
 	virtual QString		GetProcessName() const { return m_ProcessName; }
 
+	const QVector<quint64> GetStack() const { return m_Stack; }
+
 	virtual void		SetBoxPtr(void* ptr) { m_BoxPtr = ptr; }
 	virtual void*		GetBoxPtr() const { return m_BoxPtr; }
 
+#ifdef USE_MERGE_TRACE
 	virtual int			GetCount() const { return m_Counter; }
-
 	virtual bool		Equals(const QSharedDataPointer<CTraceEntry>& pOther) const {
 			return pOther->m_ProcessId == this->m_ProcessId && pOther->m_ThreadId == this->m_ThreadId
 			&& pOther->m_Name == this->m_Name
@@ -57,6 +60,7 @@ public:
 	virtual void		Merge(const QSharedDataPointer<CTraceEntry>& pOther) {
 		m_Counter++; this->m_Type.Flags |= pOther->m_Type.Flags;
 	}
+#endif
 
 	virtual bool		IsOpen() const;
 	virtual bool		IsClosed() const;
@@ -70,8 +74,9 @@ protected:
 	QString m_SubType;
 	quint32 m_ProcessId;
 	quint32 m_ThreadId;
-	QDateTime m_TimeStamp;
+	quint64 m_TimeStamp;
 	QString m_ProcessName;
+	QVector<quint64> m_Stack;
 	void* m_BoxPtr;
 
 	union
@@ -98,7 +103,9 @@ protected:
 
 	quint64 m_uid;
 
+#ifdef USE_MERGE_TRACE
 	int m_Counter;
+#endif
 };
 
 typedef QSharedDataPointer<CTraceEntry> CTraceEntryPtr;

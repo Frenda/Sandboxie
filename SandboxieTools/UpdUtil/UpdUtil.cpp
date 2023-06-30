@@ -471,9 +471,10 @@ int ApplyUpdate(std::wstring base_dir, std::wstring temp_dir, std::shared_ptr<SF
 	return Count;
 }
 
-void Execute(std::wstring wFile, std::wstring wParams)
+DWORD Execute(std::wstring wFile, std::wstring wParams)
 {
 	SHELLEXECUTEINFO si = { sizeof(SHELLEXECUTEINFO) };
+	DWORD ret = 1;
 	si.fMask = SEE_MASK_NOCLOSEPROCESS;
 	si.lpVerb = L"runas";
 	si.lpFile = wFile.c_str();
@@ -483,8 +484,11 @@ void Execute(std::wstring wFile, std::wstring wParams)
 	std::wcout << L"KmdUtil.exe " << si.lpParameters << std::endl;
 	if (ShellExecuteEx(&si)) {
 		WaitForSingleObject(si.hProcess, INFINITE);
+		GetExitCodeProcess(si.hProcess, &ret);
 		CloseHandle(si.hProcess);
 	}
+
+	return ret;
 }
 
 int ProcessUpdate(std::shared_ptr<SFileMap>& pFiles, const std::wstring& step, const std::wstring& temp_dir, const std::wstring& base_dir, const std::wstring& scope)
@@ -633,7 +637,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 		freopen("CONOUT$", "w", stdout);
 		freopen("CONOUT$", "w", stderr);
 		if (HasFlag(arguments, L"pause")) {
-			std::cout << "Sandboxie Updater Utility" << std::endl;
+			std::cout << "Sandboxie Update Utility" << std::endl;
 			std::wcout << lpCmdLine << std::endl;
 			std::cout << std::endl << "Press enter to continue..." << std::endl;
 			std::cin.get();
@@ -754,6 +758,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
 			params << L"&system=windows-" << g_osvi.dwMajorVersion << L"." << g_osvi.dwMinorVersion << L"." << g_osvi.dwBuildNumber << "-" << arch;
 
+			wchar_t StrLang[16];
+			LCIDToLocaleName(GetUserDefaultLCID(), StrLang, ARRAYSIZE(StrLang), 0);
+			if (StrLang[2] == L'-') StrLang[2] = '_';
+
+			params << L"&language=" << StrLang;
+
 			std::wstring update_key = GetArgument(arguments, L"update_key");
 			if (!update_key.empty()) params << L"&update_key=" + update_key;
 
@@ -812,9 +822,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 				if (bRestart) {
 					Execute(base_dir + L"\\KmdUtil.exe", L"scandll_silent");
 					Execute(base_dir + L"\\KmdUtil.exe", L"stop SbieSvc");
-					Execute(base_dir + L"\\KmdUtil.exe", L"stop SbieDrv");
-					Sleep(3000);
-					Execute(base_dir + L"\\KmdUtil.exe", L"stop SbieDrv");
+
+					if (Execute(base_dir + L"\\KmdUtil.exe", L"stop SbieDrv"))
+					{
+						Sleep(3000);
+						Execute(base_dir + L"\\KmdUtil.exe", L"stop SbieDrv");
+					}
 				}
 
 				ret = ApplyUpdate(base_dir, temp_dir, pFiles);

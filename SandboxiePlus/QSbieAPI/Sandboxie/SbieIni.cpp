@@ -18,6 +18,7 @@
 #include "stdafx.h"
 #include "SbieIni.h"
 #include "../SbieAPI.h"
+#include "../SbieDefs.h"
 
 #include <ntstatus.h>
 #define WIN32_NO_STATUS
@@ -156,7 +157,7 @@ SB_STATUS CSbieIni::UpdateTextList(const QString &Setting, const QStringList& Li
 		DelValue(Setting, Value);
 	// add new or changed settings
 	foreach(const QString& Value, NewSettings)
-		InsertText(Setting, Value);
+		AppendText(Setting, Value);
 	return SB_OK;
 }
 
@@ -206,6 +207,38 @@ SB_STATUS CSbieIni::DelValue(const QString& Setting, const QString& Value)
 	return m_pAPI->SbieIniSet(m_Name, Setting, Value, CSbieAPI::eIniDelete, m_RefreshOnChange);
 }
 
+void CSbieIni::SetTextMap(const QString& Setting, const QMap<QString, QStringList> Map)
+{
+	QStringList Mapping;
+	foreach(const QString& Group, Map.keys())
+	{
+		QString CurrentLine;
+		foreach(const QString & Name, Map[Group]) {
+			if (Setting.length() + 1 + Group.length() + 1 + CurrentLine.length() + 1 + Name.length() >= CONF_LINE_LEN) { // limit line length
+				Mapping.append(Group + ":" + CurrentLine);
+				CurrentLine.clear();
+			}
+			if (!CurrentLine.isEmpty()) CurrentLine.append(",");
+			CurrentLine.append(Name);
+		}
+		if(!CurrentLine.isEmpty())
+			Mapping.append(Group + ":" + CurrentLine);
+	}
+	DelValue(Setting);
+	foreach(const QString & Value, Mapping)
+		AppendText(Setting, Value);
+}
+
+QMap<QString, QStringList> CSbieIni::GetTextMap(const QString& Setting)
+{
+	QMap<QString, QStringList> Map;
+	foreach(const QString &CurrentLine, GetTextList(Setting, false)) {
+		int pos = CurrentLine.lastIndexOf(":");
+		Map[pos == -1 ? "" : CurrentLine.left(pos)].append(CurrentLine.mid(pos+1).split(","));
+	}
+	return Map;
+}
+
 QList<QPair<QString, QString>> CSbieIni::GetIniSection(qint32* pStatus, bool withTemplates) const
 {
 	qint32 status = STATUS_SUCCESS;
@@ -246,7 +279,7 @@ QList<QPair<QString, QString>> CSbieIni::GetIniSection(qint32* pStatus, bool wit
 	return Settings;
 }
 
-SB_STATUS CSbieIni::RenameSection( const QString& NewName, bool deleteOld) // Note: deleteOld is used when duplicating a box
+SB_STATUS CSbieIni::RenameSection(const QString& NewName, bool deleteOld) // Note: deleteOld is used when duplicating a box
 {
 	qint32 status = STATUS_SUCCESS;
 
@@ -296,6 +329,8 @@ do_delete:
 
 	if (m_RefreshOnChange)
 		m_pAPI->CommitIniChanges();
+
+	m_Name = NewName;
 
 	return SB_OK;
 }

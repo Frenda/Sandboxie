@@ -1,6 +1,6 @@
 ﻿/*
  * Copyright 2004-2020 Sandboxie Holdings, LLC 
- * Copyright 2020-2022 David Xanatos, xanasoft.com
+ * Copyright 2020-2023 David Xanatos, xanasoft.com
  *
  * This program is free software: you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -21,8 +21,8 @@
 #ifndef _MY_VERSION_H
 #define _MY_VERSION_H
 
-#define MY_VERSION_BINARY       5,61,4
-#define MY_VERSION_STRING       "5.61.4"
+#define MY_VERSION_BINARY       5,64,8
+#define MY_VERSION_STRING       "5.64.8"
 #define MY_ABI_VERSION          0x56000
 
 // These #defines are used by either Resource Compiler or NSIS installer
@@ -32,7 +32,7 @@
 
 #define MY_PRODUCT_NAME_STRING  "Sandboxie"
 #define MY_COMPANY_NAME_STRING  "Sandboxie-Plus.com"
-#define MY_COPYRIGHT_STRING     "Copyright © 2020-2022 by David Xanatos (xanasoft.com)"
+#define MY_COPYRIGHT_STRING     "Copyright © 2020-2023 by David Xanatos (xanasoft.com)"
 #define MY_COPYRIGHT_STRING_OLD "Copyright © 2004-2020 by Sandboxie Holdings, LLC"
 
 #define SANDBOXIE               L"Sandboxie"
@@ -57,7 +57,6 @@
 
 #define START_EXE               L"Start.exe"
 
-// see also environment variable in session.bat
 #define SBIEDLL                 L"SbieDll"
 
 #define SBIEMSG_DLL             L"SbieMsg.dll"

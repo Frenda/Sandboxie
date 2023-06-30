@@ -24,7 +24,7 @@ void CSandMan::CreateTrayIcon()
 	m_pTrayIcon->setToolTip(GetTrayText());
 	connect(m_pTrayIcon, SIGNAL(activated(QSystemTrayIcon::ActivationReason)), this, SLOT(OnSysTray(QSystemTrayIcon::ActivationReason)));
 	m_bIconEmpty = true;
-	m_bIconDisabled = false;
+	m_iIconDisabled = -1;
 	m_bIconBusy = false;
 	m_iDeletingContent = 0;
 
@@ -98,10 +98,13 @@ void CSandMan::CreateTrayMenu()
 
 	m_pTrayMenu->addSeparator();
 	m_pTrayMenu->addAction(m_pEmptyAll);
-	m_pDisableForce2 = m_pTrayMenu->addAction(tr("Pause Forcing Programs"), this, SLOT(OnDisableForce2()));
-	m_pDisableForce2->setCheckable(true);
+	m_pTrayMenu->addSeparator();
+	m_pTrayMenu->addAction(m_pDisableForce2);
 	if(m_pDisableRecovery) m_pTrayMenu->addAction(m_pDisableRecovery);
 	if(m_pDisableMessages) m_pTrayMenu->addAction(m_pDisableMessages);
+	m_pDismissUpdate = m_pTrayMenu->addAction(tr("Dismiss Update Notification"), this, SLOT(OnDismissUpdate()));
+	m_pDismissUpdate->setCheckable(true);
+	m_pDismissUpdate->setVisible(false);
 	m_pTrayMenu->addSeparator();
 
 	/*QWidgetAction* pBoxWidget = new QWidgetAction(m_pTrayMenu);
@@ -124,7 +127,7 @@ void CSandMan::CreateTrayMenu()
 	m_pTrayMenu->addAction(m_pExit);
 }
 
-QIcon CSandMan::GetTrayIcon(bool isConnected)
+QIcon CSandMan::GetTrayIcon(bool isConnected, bool bSun)
 {
 	bool bClassic = (theConf->GetInt("Options/SysTrayIcon", 1) == 2);
 
@@ -154,11 +157,13 @@ QIcon CSandMan::GetTrayIcon(bool isConnected)
 		else
 			overlay = GetIcon(IconFile, 0).pixmap(size);
 	}
+	else if(bSun)
+		overlay = GetIcon("IconSun", 0).pixmap(size);
 
 	painter.drawPixmap(0, 0, base);
 	if(!overlay.isNull()) painter.drawPixmap(0, 0, overlay);
 
-	if (m_bIconDisabled) {
+	if (m_iIconDisabled == 1) {
 		IconFile = "IconDFP";
 		if (bClassic) IconFile += "C";
 		overlay = GetIcon(IconFile, 0).pixmap(size);
@@ -532,15 +537,10 @@ void CSandMan::OnSysTray(QSystemTrayIcon::ActivationReason Reason)
 
 void CSandMan::OnBoxMenu(const QPoint & point)
 {
-	QPoint pos = ((QWidget*)m_pTrayBoxes->parent())->mapFromParent(point);
-	QTreeWidgetItem* pItem = m_pTrayBoxes->itemAt(pos);
+	QTreeWidgetItem* pItem = m_pTrayBoxes->currentItem();
 	if (!pItem)
 		return;
-	m_pTrayBoxes->setCurrentItem(pItem);
-
 	CTrayBoxesItemDelegate::m_Hold = true;
 	m_pBoxView->PopUpMenu(pItem->data(0, Qt::UserRole).toString());
 	CTrayBoxesItemDelegate::m_Hold = false;
-
-	//m_pBoxMenu->popup(QCursor::pos());	
 }

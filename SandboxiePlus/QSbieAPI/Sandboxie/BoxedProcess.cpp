@@ -19,6 +19,7 @@
 #include "BoxedProcess.h"
 #include "SandBox.h"
 #include "../SbieAPI.h"
+#include "../Helpers/DbgHelper.h"
 
 #include <ntstatus.h>
 #define WIN32_NO_STATUS
@@ -43,7 +44,7 @@ CBoxedProcess::CBoxedProcess(quint32 ProcessId, class CSandBox* pBox)
 	m_ProcessId = ProcessId;
 
 	m_ParendPID = 0;
-	m_SessionId = 0;
+	m_SessionId = -1;
 
 	m_ProcessFlags = 0;
 	m_ImageType = -1;
@@ -217,13 +218,22 @@ QString CBoxedProcess__GetPebString(HANDLE ProcessHandle, PEB_OFFSET Offset)
 
 bool CBoxedProcess::InitProcessInfo()
 {
-	HANDLE ProcessHandle;
-	ProcessHandle = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, (DWORD)m_ProcessId);
-	if (ProcessHandle == INVALID_HANDLE_VALUE) // try with less rights
+	HANDLE ProcessHandle = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, (DWORD)m_ProcessId);
+	if (ProcessHandle == NULL) // try with less rights
 		ProcessHandle = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, (DWORD)m_ProcessId);
-	if (ProcessHandle == INVALID_HANDLE_VALUE)
+	if (ProcessHandle == NULL) // try with even less rights
+		ProcessHandle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, (DWORD)m_ProcessId);
+	if (ProcessHandle == NULL)
 		return false;
 
+	InitProcessInfoImpl(ProcessHandle);
+
+	NtClose(ProcessHandle);
+	return true;
+}
+
+void CBoxedProcess::InitProcessInfoImpl(void* ProcessHandle)
+{
 	PROCESS_BASIC_INFORMATION BasicInformation;
 	NTSTATUS status = NtQueryInformationProcess(ProcessHandle, ProcessBasicInformation, &BasicInformation, sizeof(PROCESS_BASIC_INFORMATION), NULL);
 	if (NT_SUCCESS(status)) {
@@ -239,7 +249,7 @@ bool CBoxedProcess::InitProcessInfo()
 	IsWow64Process(ProcessHandle, &isTargetWow64Process);
 	m_bIsWoW64 = isTargetWow64Process;
 
-	if (1) // windows 8.1 and later // todo add os version check
+	if (m_CommandLine.isEmpty()) // windows 8.1 and later
 	{
 #define ProcessCommandLineInformation ((PROCESSINFOCLASS)60)
 		ULONG returnLength = 0;
@@ -259,18 +269,13 @@ bool CBoxedProcess::InitProcessInfo()
 	{
 		m_CommandLine = CBoxedProcess__GetPebString(ProcessHandle, PhpoCommandLine);
 	}
-
-	NtClose(ProcessHandle);
-
-	return true;
 }
 
 bool CBoxedProcess::InitProcessInfoEx()
 {
-	if (m_ProcessFlags == 0 && m_pBox) {
+	if (m_ProcessFlags == 0 && m_pBox)
 		m_ProcessFlags = m_pBox->Api()->QueryProcessInfo(m_ProcessId);
-		m_ImageType = m_pBox->Api()->QueryProcessInfo(m_ProcessId, 'gpit');
-	}
+	m_ImageType = m_pBox->Api()->QueryProcessInfo(m_ProcessId, 'gpit');
 
 	return true;
 }
@@ -367,3 +372,16 @@ bool CBoxedProcess::IsSuspended() const
 	return isSuspended;
 }
 */
+
+void CBoxedProcess::ResolveSymbols(const QVector<quint64>& Addresses)
+{
+	foreach(quint64 Address, Addresses) 
+	{
+		if (!m_Symbols.contains(Address)) {
+			SSymbol Symbol;
+			//Symbol.Name = CSymbolProvider::Instance()->Resolve(m_ProcessId, Address);
+			m_Symbols[Address] = Symbol;
+			CSymbolProvider::ResolveAsync(m_ProcessId, Address, this, SLOT(OnSymbol(quint64, const QString&)));
+		}
+	}
+}

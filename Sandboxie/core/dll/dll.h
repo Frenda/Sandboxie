@@ -1,6 +1,6 @@
 /*
  * Copyright 2004-2020 Sandboxie Holdings, LLC 
- * Copyright 2020-2021 David Xanatos, xanasoft.com
+ * Copyright 2020-2023 David Xanatos, xanasoft.com
  *
  * This program is free software: you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -251,6 +251,7 @@ extern HINSTANCE Dll_Instance;
 extern HMODULE Dll_Ntdll;
 extern HMODULE Dll_Kernel32;
 extern HMODULE Dll_KernelBase;
+extern HMODULE Dll_Win32u;
 // $Workaround$ - 3rd party fix
 extern HMODULE Dll_DigitalGuardian;
 
@@ -288,7 +289,9 @@ extern BOOLEAN Dll_IsXtAjit;
 #endif
 extern BOOLEAN Dll_IsSystemSid;
 extern BOOLEAN Dll_InitComplete;
+extern BOOLEAN Dll_EntryComplete;
 extern BOOLEAN Dll_RestrictedToken;
+extern BOOLEAN Dll_AppContainerToken;
 extern BOOLEAN Dll_ChromeSandbox;
 extern BOOLEAN Dll_FirstProcessInBox;
 extern BOOLEAN Dll_CompartmentMode;
@@ -433,7 +436,7 @@ BOOLEAN Dll_SkipHook(const WCHAR *HookName);
 
 void *Dll_JumpStub(void *OldCode, void *NewCode, ULONG_PTR StubArg);
 
-#if !defined(_M_ARM64) && !defined(_M_ARM64EC)
+#if !defined(_M_ARM64EC)
 ULONG_PTR *Dll_JumpStubData(void);
 #endif
 
@@ -622,6 +625,8 @@ NTSTATUS Proc_SectionCallback(HANDLE FileHandle);
 void Secure_InitSecurityDescriptors(void);
 
 BOOLEAN Secure_IsRestrictedToken(BOOLEAN CheckThreadToken);
+
+BOOLEAN Secure_IsAppContainerToken(HANDLE hToken);
 
 BOOLEAN Secure_IsLocalSystemToken(BOOLEAN CheckThreadToken);
 

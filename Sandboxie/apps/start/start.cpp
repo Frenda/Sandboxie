@@ -24,9 +24,9 @@
 
 #include "common/win32_ntddk.h"
 #include "core/dll/sbiedll.h"
+#include "common/defines.h"
 #include "core/svc/SbieIniWire.h"
 #include "common/my_version.h"
-#include "common/defines.h"
 #include "msgs/msgs.h"
 
 
@@ -76,7 +76,7 @@ extern "C" {
 //---------------------------------------------------------------------------
 
 
-WCHAR BoxName[34];
+WCHAR BoxName[BOXNAME_COUNT];
 
 PWSTR ChildCmdLine = NULL;
 BOOL run_mail_agent = FALSE;
@@ -491,7 +491,7 @@ BOOL Parse_Command_Line(void)
                 }
             }
 
-            if (tmp == cmd || (cmd - tmp > 32)) {
+            if (tmp == cmd || (cmd - tmp > (BOXNAME_COUNT - 2))) {
 
                 if (run_silent)
                     ExitProcess(ERROR_UNKNOWN_PROPERTY);
@@ -1063,6 +1063,14 @@ int Program_Start(void)
 
         expanded = MyHeapAlloc(8192 * sizeof(WCHAR));
         ExpandEnvironmentStrings(cmdline, expanded, 8192);
+
+        //
+        // When the service process has a manifest which requires elevated privileges,
+        // CreateProcess will fail if we did not start with a elevated token.
+        // To fix this issue we always fake being elevated when starting a service.
+        //
+
+        SbieDll_SetFakeAdmin(TRUE);
 
 		//
 		// If the command contains a space but no ", try to fix it

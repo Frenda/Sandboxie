@@ -54,11 +54,11 @@ static NTSTATUS Thread_MyImpersonateClient(
 
 static NTSTATUS Thread_CheckProcessObject(
     PROCESS *proc, void *Object, UNICODE_STRING *Name,
-    ACCESS_MASK GrantedAccess);
+    ULONG Operation, ACCESS_MASK GrantedAccess);
 
 static NTSTATUS Thread_CheckThreadObject(
     PROCESS *proc, void *Object, UNICODE_STRING *Name,
-    ACCESS_MASK GrantedAccess);
+    ULONG Operation, ACCESS_MASK GrantedAccess);
 
 
 //---------------------------------------------------------------------------
@@ -957,7 +957,7 @@ _FX NTSTATUS Thread_StoreThreadToken(PROCESS *proc)
 
 _FX NTSTATUS Thread_CheckProcessObject(
     PROCESS *proc, void *Object, UNICODE_STRING *Name,
-    ACCESS_MASK GrantedAccess)
+    ULONG Operation, ACCESS_MASK GrantedAccess)
 {
     if (Obj_CallbackInstalled) return STATUS_SUCCESS; // ObCallbacks takes care of that already
     PEPROCESS ProcessObject = (PEPROCESS)Object;
@@ -972,7 +972,7 @@ _FX NTSTATUS Thread_CheckProcessObject(
 
 _FX NTSTATUS Thread_CheckThreadObject(
     PROCESS *proc, void *Object, UNICODE_STRING *Name,
-    ACCESS_MASK GrantedAccess)
+    ULONG Operation, ACCESS_MASK GrantedAccess)
 {
     if (Obj_CallbackInstalled) return STATUS_SUCCESS; // ObCallbacks takes care of that already
     PEPROCESS ProcessObject = PsGetThreadProcess(Object);
@@ -1139,6 +1139,36 @@ finish:
 
 
 //---------------------------------------------------------------------------
+// Thread_IsProtectedProcess
+//---------------------------------------------------------------------------
+
+NTKERNELAPI BOOLEAN NTAPI PsIsProtectedProcess(_In_ PEPROCESS Process);
+
+_FX BOOLEAN Thread_IsProtectedProcess(HANDLE pid)
+{
+    PEPROCESS ProcessObject;
+    NTSTATUS status;
+    BOOLEAN ret = FALSE;
+
+    //
+    // Check if this process is a protected process,
+    // as protected processes are integral windows processes or trusted antimalware services
+    // we allow such processes to access even confidential sandboxed programs.
+    //
+
+    status = PsLookupProcessByProcessId(pid, &ProcessObject);
+    if (NT_SUCCESS(status)) {
+        
+        ret = PsIsProtectedProcess(ProcessObject);
+
+        ObDereferenceObject(ProcessObject);
+    }
+
+    return ret;
+}
+
+
+//---------------------------------------------------------------------------
 // Thread_CheckObject_CommonEx
 //---------------------------------------------------------------------------
 
@@ -1171,56 +1201,68 @@ _FX ACCESS_MASK Thread_CheckObject_CommonEx(
 
     if (!proc || proc->bHostInject) { // caller is not sandboxed
 
-        KIRQL irql;
-        PROCESS* proc2 = Process_Find(pid, &irql);
-        BOOLEAN protect_process = FALSE;
+        if (Process_Find(pid, NULL)) {  // target is sandboxed - lock free check
+        
+            void* nbuf = 0;
+            ULONG nlen = 0;
+            WCHAR* nptr = 0;
+            Process_GetProcessName(Driver_Pool, (ULONG_PTR)cur_pid, &nbuf, &nlen, &nptr); // driver verifier: when calling this IRQL must be PASSIVE_LEVEL
+            if (nbuf) {
 
-        if (proc2 && !proc2->bHostInject) { // target is sandboxed
+                BOOLEAN protect_process = FALSE;
 
-            ACCESS_MASK WriteAccess;
-            if (EntireProcess)
-                WriteAccess = (DesiredAccess & PROCESS_DENIED_ACCESS_MASK);
-            else
-                WriteAccess = (DesiredAccess & THREAD_DENIED_ACCESS_MASK);
+                KIRQL irql;
+                PROCESS* proc2 = Process_Find(pid, &irql);
 
-            if (WriteAccess || proc2->confidential_box) {
+                if (proc2 && !proc2->bHostInject) {
 
-                void* nbuf = 0;
-                ULONG nlen = 0;
-                WCHAR* nptr = 0;
-                Process_GetProcessName(proc2->pool, (ULONG_PTR)cur_pid, &nbuf, &nlen, &nptr);
-                if (nbuf) {
+                    ACCESS_MASK WriteAccess;
+                    if (EntireProcess)
+                        WriteAccess = (DesiredAccess & PROCESS_DENIED_ACCESS_MASK);
+                    else
+                        WriteAccess = (DesiredAccess & THREAD_DENIED_ACCESS_MASK);
 
-                    protect_process = Process_GetConfEx_bool(proc2->box, nptr, L"DenyHostAccess", FALSE);
+                    if (WriteAccess || proc2->confidential_box) {
 
-                    //
-                    // in case use specified wildcard "*" always grant access to sbiesvc.exe and csrss.exe
-                    // and a few others
-                    //
+                        protect_process = Process_GetConfEx_bool(proc2->box, nptr, L"DenyHostAccess", proc2->confidential_box);
 
-                    if (protect_process /*&& MyIsProcessRunningAsSystemAccount(cur_pid)*/) {
-                        if ((_wcsicmp(nptr, SBIESVC_EXE) == 0) || (_wcsicmp(nptr, L"csrss.exe") == 0)
-                            || (_wcsicmp(nptr, L"conhost.exe") == 0)
-                            || (_wcsicmp(nptr, L"taskmgr.exe") == 0) || (_wcsicmp(nptr, L"sandman.exe") == 0))
-                            protect_process = FALSE;
+                        //
+                        // in case use specified wildcard "*" always grant access to sbiesvc.exe and csrss.exe
+                        // and a few others
+                        //
+
+                        if (protect_process /*&& MyIsProcessRunningAsSystemAccount(cur_pid)*/) {
+                            if ((_wcsicmp(nptr, SBIESVC_EXE) == 0) || (_wcsicmp(nptr, L"csrss.exe") == 0)
+                                || (_wcsicmp(nptr, L"conhost.exe") == 0)
+                                || (_wcsicmp(nptr, L"taskmgr.exe") == 0) || (_wcsicmp(nptr, L"sandman.exe") == 0)
+                                || Thread_IsProtectedProcess(cur_pid))
+                                protect_process = FALSE;
+                        }
+
+                        if (protect_process) {
+
+                            if (Conf_Get_Boolean(proc2->box->name, L"NotifyBoxProtected", 0, FALSE)) {
+
+                                //WCHAR msg_str[256];
+                                //RtlStringCbPrintfW(msg_str, sizeof(msg_str), L"Protect boxed processes %s (%d) from %s (%d) requesting 0x%08X", proc2->image_name, (ULONG)pid, nptr, (ULONG)cur_pid, DesiredAccess);
+                                //Session_MonitorPut(MONITOR_IMAGE | MONITOR_TRACE, msg_str, pid);
+
+                                Log_Msg_Process(MSG_1318, nptr, proc2->image_name, -1, PsGetCurrentProcessId());
+
+                            }
+                        }
                     }
-
-                    if (protect_process) {
-                        WCHAR msg_str[256];
-                        RtlStringCbPrintfW(msg_str, sizeof(msg_str), L"Protect boxed processes %s (%d) from %s (%d) requesting 0x%08X", proc2->image_name, (ULONG)pid, nptr, (ULONG)cur_pid, DesiredAccess);
-                        Session_MonitorPut(MONITOR_IMAGE | MONITOR_TRACE, msg_str, pid);
-                    }
-
-                    Mem_Free(nbuf, nlen);
                 }
+
+                ExReleaseResourceLite(Process_ListLock);
+                KeLowerIrql(irql);
+
+                Mem_Free(nbuf, nlen);
+
+                if (protect_process)
+                    return 0; // deny access
             }
         }
-
-        ExReleaseResourceLite(Process_ListLock);
-        KeLowerIrql(irql);
-
-        if (protect_process)
-            return 0; // deny access
     }
 
     //

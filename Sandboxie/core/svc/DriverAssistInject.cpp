@@ -1,6 +1,6 @@
 /*
  * Copyright 2004-2020 Sandboxie Holdings, LLC 
- * Copyright 2020-2022 David Xanatos, xanasoft.com
+ * Copyright 2020-2023 David Xanatos, xanasoft.com
  *
  * This program is free software: you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -69,8 +69,9 @@ void DriverAssist::InjectLow(void *_msg)
 		goto finish;
 	}
 
-	WCHAR boxname[48];
-	errlvl = SbieApi_QueryProcessEx2((HANDLE)msg->process_id, 0, boxname, NULL, NULL, NULL, NULL);
+	WCHAR boxname[BOXNAME_COUNT];
+    WCHAR exename[99];
+	errlvl = SbieApi_QueryProcessEx2((HANDLE)msg->process_id, 96, boxname, exename, NULL, NULL, NULL);
 	if (errlvl != 0)
 		goto finish;
 
@@ -149,8 +150,10 @@ finish:
 
     if (hProcess) {
 
-        if (errlvl)
-            TerminateProcess(hProcess, 1);
+        if (errlvl) {
+            SbieApi_Call(API_INJECT_COMPLETE, 3, (ULONG_PTR)msg->process_id, NULL, errlvl);
+            //TerminateProcess(hProcess, 1);
+        }
 
         CloseHandle(hProcess);
     }

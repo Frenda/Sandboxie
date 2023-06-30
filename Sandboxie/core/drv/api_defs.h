@@ -77,6 +77,7 @@
 
 #define API_MAX_PIDS                512
 
+#define MAX_REG_ROOT_LEN            256
 
 //---------------------------------------------------------------------------
 // Driver API Codes
@@ -157,6 +158,9 @@ enum {
     API_FILTER_TOKEN,
     API_SET_SECURE_PARAM,
     API_GET_SECURE_PARAM,
+    API_MONITOR_GET2,
+    API_PROTECT_ROOT,
+    API_UNPROTECT_ROOT,
 
     API_LAST
 };
@@ -352,6 +356,11 @@ API_ARGS_FIELD(BOOLEAN,is_message)
 //API_ARGS_FIELD(ULONG, log_aux)
 API_ARGS_CLOSE(API_MONITOR_PUT2_ARGS)
 
+API_ARGS_BEGIN(API_MONITOR_GET2_ARGS)
+API_ARGS_FIELD(WCHAR *, buffer_ptr)
+API_ARGS_FIELD(ULONG *, buffer_len)
+API_ARGS_CLOSE(API_MONITOR_GET2_ARGS)
+
 API_ARGS_BEGIN(API_GET_UNMOUNT_HIVE_ARGS)
 API_ARGS_FIELD(WCHAR *,path)
 API_ARGS_CLOSE(API_GET_UNMOUNT_HIVE_ARGS)
@@ -403,6 +412,8 @@ API_ARGS_CLOSE(API_SESSION_LEADER_ARGS)
 
 API_ARGS_BEGIN(API_IS_BOX_ENABLED_ARGS)
 API_ARGS_FIELD(WCHAR *,box_name)
+API_ARGS_FIELD(WCHAR *,sid_string)
+API_ARGS_FIELD(ULONG, session_id)
 API_ARGS_CLOSE(API_IS_BOX_ENABLED_ARGS)
 
 
@@ -506,7 +517,7 @@ typedef struct _SVC_REGHIVE_MSG {
 
     ULONG process_id;
     ULONG session_id;
-    WCHAR boxname[34];
+    WCHAR boxname[BOXNAME_COUNT];
 
 } SVC_REGHIVE_MSG;
 

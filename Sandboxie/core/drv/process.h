@@ -141,6 +141,7 @@ struct _PROCESS {
 
     BOOLEAN always_close_for_boxed;
     BOOLEAN dont_open_for_boxed;
+    BOOLEAN protect_host_images;
     BOOLEAN use_security_mode;
     BOOLEAN is_locked_down;
 #ifdef USE_MATCH_PATH_EX
@@ -197,6 +198,7 @@ struct _PROCESS {
     LIST read_ipc_paths;                // PATTERN elements
     ULONG ipc_trace;
     BOOLEAN disable_object_flt;
+    BOOLEAN ipc_namespace_isoaltion;
     BOOLEAN ipc_warn_startrun;
     BOOLEAN ipc_warn_open_proc;
     BOOLEAN ipc_block_password;
@@ -275,15 +277,23 @@ BOOLEAN Process_MatchImage(
 // is suffixed unless the value already contains a star anywhere
 
 BOOLEAN Process_GetPaths(
-    PROCESS *proc, LIST *list, const WCHAR *setting_name, BOOLEAN AddStar);
+    PROCESS *proc, LIST *list, const WCHAR *section_name, const WCHAR *setting_name, BOOLEAN AddStar);
 
 
+#ifndef USE_MATCH_PATH_EX
 // Process_GetPaths2:  similar to Process_GetPaths, but adds the path
 // only if it does not already match the second path-list
 
 BOOLEAN Process_GetPaths2(
     PROCESS *proc, LIST *list, LIST *list2,
     const WCHAR *setting_name, BOOLEAN AddStar);
+#endif
+
+
+#ifdef USE_TEMPLATE_PATHS
+BOOLEAN Process_GetTemplatePaths(
+    PROCESS *proc, LIST *list, const WCHAR *setting_name);
+#endif
 
 
 // Process_AddPath:   given a process and the name of a path-list
@@ -397,6 +407,18 @@ NTSTATUS Process_GetSidStringAndSessionId(
     UNICODE_STRING *SidString, ULONG *SessionId);
 
 
+// Get a string from a processes PEB
+
+void Process_GetStringFromPeb(
+    PEPROCESS ProcessObject, ULONG StringOffset, ULONG StringMaxLenInChars,
+    WCHAR **OutBuffer, ULONG *OutLength);
+
+// Get a processes command line
+
+void Process_GetCommandLine(
+    HANDLE ProcessId,
+    WCHAR **OutBuffer, ULONG *OutLength);
+
 // Get a box for a forced sandboxed process
 
 BOX *Process_GetForcedStartBox(
@@ -455,6 +477,10 @@ BOOLEAN Process_CancelProcess(PROCESS *proc);
 // Terminate a process using a helper thread
 
 BOOLEAN Process_ScheduleKill(PROCESS *proc, LONG delay_ms);
+
+// Check if a process is part of the sandboxie installation
+
+VOID Process_IsSbieImage(const WCHAR *image_path, BOOLEAN *image_sbie, BOOLEAN *is_start_exe);
 
 // Check if process is running within a
 // Program Compatibility Assistant (PCA) job

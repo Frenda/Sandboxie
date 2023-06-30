@@ -28,6 +28,7 @@
 #include "api.h"
 #include "obj.h"
 #include "common/pattern.h"
+#include "common/my_version.h"
 
 
 //---------------------------------------------------------------------------
@@ -84,6 +85,18 @@ _FX BOOLEAN Process_IsSameBox(
         ok = TRUE;
 
     } else if (proc2 && (! proc2->terminated) && (! proc2->untouchable)) {
+
+        //
+        // when host image protection is enabled, sandboxed processes 
+        // are protected form being written to by other sandboxed processes even from the same box
+        // 
+        // Note: this restriction will prevent images located in the sandbox from
+        // starting not images located on the host
+        //
+
+        if (!proc2->image_from_box && proc2->protect_host_images && proc->image_from_box)
+            ok = FALSE;
+        else
 
         //
         // write access is only permitted within the same sandbox
@@ -442,7 +455,7 @@ _FX BOOLEAN Process_GetConf_bool(PROCESS* proc, const WCHAR* setting, BOOLEAN de
 
 
 _FX BOOLEAN Process_GetPaths(
-    PROCESS *proc, LIST *list, const WCHAR *setting_name, BOOLEAN AddStar)
+    PROCESS *proc, LIST *list, const WCHAR *section_name, const WCHAR *setting_name, BOOLEAN AddStar)
 {
     ULONG index;
     const WCHAR *value;
@@ -461,7 +474,7 @@ _FX BOOLEAN Process_GetPaths(
         // get next configuration setting for this path list
         //
 
-        value = Conf_Get(proc->box->name, setting_name, index);
+        value = Conf_Get(section_name, setting_name, index);
         if (! value)
             break;
 
@@ -499,6 +512,7 @@ _FX BOOLEAN Process_GetPaths(
 //---------------------------------------------------------------------------
 
 
+#ifndef USE_MATCH_PATH_EX
 _FX BOOLEAN Process_GetPaths2(
     PROCESS *proc, LIST *list, LIST *list2,
     const WCHAR *setting_name, BOOLEAN AddStar)
@@ -554,6 +568,33 @@ _FX BOOLEAN Process_GetPaths2(
 
     return TRUE;
 }
+#endif
+
+
+//---------------------------------------------------------------------------
+// Process_GetTemplatePaths
+//---------------------------------------------------------------------------
+
+
+#ifdef USE_TEMPLATE_PATHS
+BOOLEAN Process_GetTemplatePaths(PROCESS *proc, LIST *list, const WCHAR *setting_name)
+{
+    BOOLEAN ok;
+
+    ok = Process_GetPaths(proc, list, L"TemplateDefaultPaths", setting_name, FALSE);
+
+    if (ok && proc->restrict_devices)
+        ok = Process_GetPaths(proc, list, L"TemplateSModPaths", setting_name, FALSE);
+
+    if (ok && proc->use_privacy_mode)
+        ok = Process_GetPaths(proc, list, L"TemplatePModPaths", setting_name, FALSE);
+
+    if (ok && proc->bAppCompartment)
+        ok = Process_GetPaths(proc, list, L"TemplateAppCPaths", setting_name, FALSE);
+
+    return ok;
+}
+#endif
 
 
 //---------------------------------------------------------------------------
@@ -578,7 +619,7 @@ _FX BOOLEAN Process_AddPath(
     // if this is a file setting, also check the path for reparse points
     //
 
-    if (setting_name) {
+    if (setting_name && AddStar) {
 
         const WCHAR *setting_name_ptr = setting_name;
         if (_wcsnicmp(setting_name, Process_Normal, 6) == 0 ||
@@ -594,10 +635,11 @@ _FX BOOLEAN Process_AddPath(
 
         if (setting_name_ptr) {
 
-            if (_wcsnicmp(setting_name_ptr, L"Key", 3) == 0)
+            if (_wcsnicmp(setting_name_ptr, L"Key", 3) == 0
+                  || _wcsnicmp(setting_name_ptr, L"Conf", 4) == 0) {
                 RemoveBackslashes = TRUE;
 
-            else if (_wcsnicmp(setting_name_ptr, L"File", 4) == 0
+            } else if (_wcsnicmp(setting_name_ptr, L"File", 4) == 0
                   || _wcsnicmp(setting_name_ptr, L"Pipe", 4) == 0) {
 
                 RemoveBackslashes = TRUE;
@@ -892,7 +934,7 @@ _FX ULONG Process_MatchPathEx(
     ULONG path_lwr_len;
     int match_len;
     ULONG level;
-    BOOLEAN exact;
+    ULONG flags;
     USHORT wildc;
     ULONG mp_flags;
 
@@ -936,7 +978,7 @@ _FX ULONG Process_MatchPathEx(
     //
 
     level = 3; // 3 - global default - lower is better, 3 is max value
-    exact = FALSE;
+    flags = 0;
     wildc = -1; // lower is better
     match_len = 0;
     if (path_code == L'n' && proc->file_block_network_files) {
@@ -977,7 +1019,7 @@ _FX ULONG Process_MatchPathEx(
     // these paths are inaccessible for true and copy locations 
     //
 
-    if (Pattern_MatchPathListEx(path_lwr, path_len, closed_list, &level, &match_len, &exact, &wildc, patsrc)) {
+    if (Pattern_MatchPathListEx(path_lwr, path_len, closed_list, &level, &match_len, &flags, &wildc, patsrc)) {
         mp_flags = TRUE_PATH_CLOSED_FLAG | COPY_PATH_CLOSED_FLAG;
         if (!proc->use_rule_specificity) goto finish;
     }
@@ -987,7 +1029,7 @@ _FX ULONG Process_MatchPathEx(
     // these paths allow read access to true location and read/write access to copy location
     //
     
-    if (Pattern_MatchPathListEx(path_lwr, path_len, write_list, &level, &match_len, &exact, &wildc, patsrc)) {
+    if (Pattern_MatchPathListEx(path_lwr, path_len, write_list, &level, &match_len, &flags, &wildc, patsrc)) {
         mp_flags = TRUE_PATH_CLOSED_FLAG | COPY_PATH_OPEN_FLAG;
         if (!proc->use_rule_specificity) goto finish;
     }
@@ -997,7 +1039,7 @@ _FX ULONG Process_MatchPathEx(
     // these paths allow read only access to true path and copy locations
     //
     
-    if (Pattern_MatchPathListEx(path_lwr, path_len, read_list, &level, &match_len, &exact, &wildc, patsrc)) {
+    if (Pattern_MatchPathListEx(path_lwr, path_len, read_list, &level, &match_len, &flags, &wildc, patsrc)) {
         mp_flags = TRUE_PATH_READ_FLAG | COPY_PATH_READ_FLAG;
         if (!proc->use_rule_specificity) goto finish;
     }
@@ -1007,7 +1049,7 @@ _FX ULONG Process_MatchPathEx(
     // these paths allow reading the true location and write to the copy location
     //
 
-    if (Pattern_MatchPathListEx(path_lwr, path_len, normal_list, &level, &match_len, &exact, &wildc, patsrc)) {
+    if (Pattern_MatchPathListEx(path_lwr, path_len, normal_list, &level, &match_len, &flags, &wildc, patsrc)) {
         mp_flags = TRUE_PATH_READ_FLAG | COPY_PATH_OPEN_FLAG;
         // don't goto finish as open can overwrite this 
     }
@@ -1017,7 +1059,7 @@ _FX ULONG Process_MatchPathEx(
     // these paths allow read/write access to the true location
     //
 
-    if (Pattern_MatchPathListEx(path_lwr, path_len, open_list, &level, &match_len, &exact, &wildc, patsrc)) {
+    if (Pattern_MatchPathListEx(path_lwr, path_len, open_list, &level, &match_len, &flags, &wildc, patsrc)) {
         mp_flags = TRUE_PATH_OPEN_FLAG;
     }
     
@@ -1331,6 +1373,34 @@ _FX BOOLEAN Process_CancelProcess(PROCESS *proc)
     msg.reason = proc->reason;
 
     return Api_SendServiceMessage(SVC_CANCEL_PROCESS, sizeof(msg), &msg);
+}
+
+
+//---------------------------------------------------------------------------
+// Process_IsSbieImage
+//---------------------------------------------------------------------------
+
+
+_FX VOID Process_IsSbieImage(const WCHAR* image_path, BOOLEAN *image_sbie, BOOLEAN *is_start_exe)
+{
+    if(image_sbie) *image_sbie = FALSE;
+    if(is_start_exe) *is_start_exe = FALSE;
+
+    WCHAR *image_name = wcsrchr(image_path, L'\\');
+    if (image_name) {
+
+        ULONG len = (ULONG)(image_name - image_path);
+        if ((len == Driver_HomePathNt_Len) &&
+                (wcsncmp(image_path, Driver_HomePathNt, len) == 0)) {
+
+            if(image_sbie) *image_sbie = TRUE;
+
+            if (_wcsicmp(image_name + 1, START_EXE) == 0) {
+
+                if(is_start_exe) *is_start_exe = TRUE;
+            }
+        }
+    }
 }
 
 

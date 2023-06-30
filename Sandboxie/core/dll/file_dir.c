@@ -1,6 +1,6 @@
 /*
  * Copyright 2004-2020 Sandboxie Holdings, LLC 
- * Copyright 2020-2022 David Xanatos, xanasoft.com
+ * Copyright 2020-2023 David Xanatos, xanasoft.com
  *
  * This program is free software: you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -527,16 +527,6 @@ _FX NTSTATUS File_Merge(
 			merge->files[0].no_file_ids = TRUE;
         }
 
-        if (File_Windows2000) {
-            //
-            // Windows 2000 SP 4 seems to include support for info class
-            // FileIdBothDirectoryInformation, although according to
-            // documentation it is only supported on Windows XP and later
-            //
-			for(ULONG i = 0; i < 2 + File_Snapshot_Count; i++)
-				merge->files[i].no_file_ids = TRUE;
-        }
-
         List_Insert_After(&File_DirHandles, NULL, merge);
         Handle_RegisterCloseHandler(merge->handle, File_NtCloseDir);
     }
@@ -798,7 +788,7 @@ _FX NTSTATUS File_OpenForMerge(
 
             if (File_Delete_v2) {
 
-                WCHAR* Relocation;
+                WCHAR* Relocation = NULL;
 			    ULONG Flags = File_GetPathFlags_internal(&Cur_Snapshot->PathRoot, TempPath, &Relocation, TRUE);
                 if (FILE_PATH_DELETED(Flags))
                     break;
@@ -918,10 +908,13 @@ _FX NTSTATUS File_OpenForMerge(
         // true directory we parse the rule list and construct a cached dummy directory
         //
 
-        if (use_rule_specificity && File_MergeDummy(TruePath, merge->true_ptr, &merge->file_mask) == STATUS_SUCCESS) {
+        if (use_rule_specificity) {
 
-            merge->true_ptr->handle = NULL;
-            status = STATUS_SUCCESS;
+            if (File_MergeDummy(TruePath, merge->true_ptr, &merge->file_mask) == STATUS_SUCCESS) {
+
+                merge->true_ptr->handle = NULL;
+                status = STATUS_SUCCESS;
+            }
         }
     }
 
@@ -1425,10 +1418,11 @@ _FX NTSTATUS File_MergeDummy(
 
                 WCHAR* FakePath = Dll_AllocTemp(TruePathLen * sizeof(WCHAR) + 1 + name_len * sizeof(WCHAR) + 10);
 
-                wmemcpy(FakePath, TruePath, TruePathLen * sizeof(WCHAR));
-                wcscat(FakePath, L"\\");
-                end = wcschr(FakePath, L'\0');
-                wmemcpy(end, ptr, name_len * sizeof(WCHAR));
+                wmemcpy(FakePath, TruePath, TruePathLen);
+                FakePath[TruePathLen++] = L'\\';
+                FakePath[TruePathLen] = L'\0';
+                end = &FakePath[TruePathLen];
+                wmemcpy(end, ptr, name_len);
                 end[name_len] = L'\0';
 
                 FILE_NETWORK_OPEN_INFORMATION info;
@@ -1446,6 +1440,7 @@ _FX NTSTATUS File_MergeDummy(
                     memcpy(info_ptr->FileName, ptr, info_ptr->FileNameLength);
                     info_ptr->FileName[info_ptr->FileNameLength] = L'\0';
 
+                    info_ptr->CreationTime = info.CreationTime;
                     info_ptr->LastAccessTime = info.LastAccessTime;
                     info_ptr->LastWriteTime = info.LastWriteTime;
                     info_ptr->ChangeTime = info.ChangeTime;
@@ -1453,10 +1448,28 @@ _FX NTSTATUS File_MergeDummy(
                     info_ptr->EndOfFile = info.EndOfFile;
                     info_ptr->FileAttributes = info.FileAttributes;
 
+                    
+    //ULONG           NextEntryOffset;
+    //ULONG           FileIndex;
+    //ULONG           EaInformationLength;
+    //CCHAR           ShortNameLength;
+    //WCHAR           ShortName[12];
+    //LARGE_INTEGER   FileId;
+                    
+
+                    info_ptr->FileId.QuadPart = -1;
+
                     PrevEntry = &info_ptr->NextEntryOffset;
+
                     info_ptr->NextEntryOffset = sizeof(FILE_ID_BOTH_DIR_INFORMATION) + info_ptr->FileNameLength + sizeof(WCHAR) + 16; // +16 some buffer space
+
+                    ULONG tmp = (info_ptr->NextEntryOffset & 0x07);
+                    if (tmp != 0) // fix alignment when needed
+                        info_ptr->NextEntryOffset += 0x8 - tmp;
+
                     info_ptr = (FILE_ID_BOTH_DIR_INFORMATION*)
                         ((UCHAR*)info_ptr + info_ptr->NextEntryOffset);
+
                     // todo: fix-me possible info_area buffer overflow!!!!
                 }
             }
@@ -1709,6 +1722,12 @@ _FX NTSTATUS File_GetMergedInformation(
             break;
         }
 
+        //if (ptr_info->FileId.QuadPart == -1) {
+        //    WCHAR msg[1024];
+        //    Sbie_snwprintf(msg, 1024, L"File_MergeDummy simulate %s", ptr_info->FileName);
+        //    SbieApi_MonitorPutMsg(MONITOR_OTHER | MONITOR_TRACE, msg);
+        //}
+
         if (File_Delete_v2) {
 
             if ((merge->true_ptr && ptr_info == merge->true_ptr->info) // is in true path
@@ -1797,6 +1816,15 @@ _FX NTSTATUS File_GetMergedInformation(
 
         name_ptr = File_CopyFixedInformation(
             ptr_info, next_entry, FileInformationClass);
+
+        // This structure must be aligned on a LONGLONG (8-byte) 
+        // boundary. If a buffer contains two or more of these 
+        // structures, the NextEntryOffset value in each entry, 
+        // except the last, falls on an 8-byte boundary.
+        
+        ULONG tmp = (*(ULONG*)next_entry & 0x07);
+        if (tmp != 0) // fix alignment when needed
+            *(ULONG*)next_entry += 0x8 - tmp;
 
         // copy as much of the filename as there is room available
         // in the caller's buffer.  note that for the second and

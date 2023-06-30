@@ -56,7 +56,7 @@ CRecoveryWindow::CRecoveryWindow(const CSandBoxPtr& pBox, bool bImmediate, QWidg
 	m_LastTargetIndex = 0;
 	m_bTargetsChanged = false;
 	m_bReloadPending = false;
-	m_DeleteShapshots = false;
+	m_DeleteSnapshots = false;
 
 	QStyle* pStyle = QStyleFactory::create("windows");
 	ui.treeFiles->setStyle(pStyle);
@@ -65,7 +65,7 @@ CRecoveryWindow::CRecoveryWindow(const CSandBoxPtr& pBox, bool bImmediate, QWidg
 
 	ui.btnDeleteAll->setVisible(false);
 
-	m_pFileModel = new CSimpleTreeModel();
+	m_pFileModel = new CSimpleTreeModel(this);
 	m_pFileModel->SetUseIcons(true);
 	m_pFileModel->AddColumn(tr("File Name"), "FileName");
 	m_pFileModel->AddColumn(tr("File Size"), "FileSize");
@@ -79,13 +79,14 @@ CRecoveryWindow::CRecoveryWindow(const CSandBoxPtr& pBox, bool bImmediate, QWidg
 	//ui.treeFiles->setItemDelegate(theGUI->GetItemDelegate());
 
 	ui.treeFiles->setModel(m_pSortProxy);
-	((CSortFilterProxyModel*)m_pSortProxy)->setView(ui.treeFiles);
 
 	ui.treeFiles->setSelectionMode(QAbstractItemView::ExtendedSelection);
 	ui.treeFiles->setSortingEnabled(true);
 	//ui.treeFiles->setUniformRowHeights(true);
 
-	ui.gridLayout->addWidget(new CFinder(m_pSortProxy, this, true), 3, 0, 1, 5);
+	CFinder* pFinder = new CFinder(m_pSortProxy, this);
+	ui.gridLayout->addWidget(pFinder, 3, 0, 1, 5);
+	pFinder->SetTree(ui.treeFiles);
 	ui.finder->deleteLater(); // remove place holder
 
 	//connect(ui.treeFiles, SIGNAL(clicked(const QModelIndex&)), this, SLOT(UpdateSnapshot(const QModelIndex&)));
@@ -241,7 +242,10 @@ void CRecoveryWindow::OnDelete()
 {
 	QMap<QString, SRecItem> FileMap = GetFiles();
 
-	if (QMessageBox("Sandboxie-Plus", tr("Do you really want to delete %1 selected files?").arg(FileMap.count()), QMessageBox::Question, QMessageBox::Yes, QMessageBox::No | QMessageBox::Default | QMessageBox::Escape, QMessageBox::NoButton, this).exec() != QMessageBox::Yes)
+	if (FileMap.isEmpty())
+		return;
+
+	if (QMessageBox::Yes != QMessageBox("Sandboxie-Plus", tr("Do you really want to delete %1 selected files?").arg(FileMap.count()), QMessageBox::Question, QMessageBox::Yes, QMessageBox::No | QMessageBox::Default | QMessageBox::Escape, QMessageBox::NoButton, this).exec())
 		return;
 
 	foreach(const QString & FilePath, FileMap.keys())
@@ -258,7 +262,7 @@ void CRecoveryWindow::OnDeleteAll()
 
 void CRecoveryWindow::OnDeleteEverything()
 {
-	m_DeleteShapshots = true;
+	m_DeleteSnapshots = true;
 	OnDeleteAll();
 }
 
@@ -571,7 +575,7 @@ void CRecoveryWindow::RecoverFiles(bool bBrowse, QString RecoveryFolder)
 	}
 
 
-	SB_PROGRESS Status = theGUI->RecoverFiles(m_pBox->GetName(), FileList);
+	SB_PROGRESS Status = theGUI->RecoverFiles(m_pBox->GetName(), FileList, this);
 	if (Status.GetStatus() == OP_ASYNC)
 	{
 		connect(Status.GetValue().data(), SIGNAL(Finished()), this, SLOT(FindFiles()));

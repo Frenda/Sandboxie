@@ -61,7 +61,7 @@ struct _THREAD {
     BOOLEAN token_CopyOnOpen;
     BOOLEAN token_EffectiveOnly;
     SECURITY_IMPERSONATION_LEVEL token_ImpersonationLevel;
-
+    BOOLEAN create_process_in_progress;
 };
 
 //---------------------------------------------------------------------------
@@ -104,6 +104,12 @@ ACCESS_MASK Thread_CheckObject_CommonEx(
     HANDLE pid, PEPROCESS ProcessObject,
     ACCESS_MASK DesiredAccess, BOOLEAN EntireProcess,
     BOOLEAN ExplicitAccess);
+
+//---------------------------------------------------------------------------
+// Variables
+//---------------------------------------------------------------------------
+
+extern void *Thread_AnonymousToken;
 
 //---------------------------------------------------------------------------
 

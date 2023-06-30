@@ -22,6 +22,16 @@ class CBoxBorder;
 class CSbieTemplates;
 class CTraceView;
 
+struct ToolBarAction {
+	// Identifier of action stored in ini. Empty for separator.	
+	QString scriptName = "";
+
+	// Not owned. Null for special cases.
+	QAction* action;
+
+	// Display name override for display in toolbar config menu. Empty if no override.
+	QString nameOverride = "";
+};
 
 class CSandMan : public QMainWindow
 {
@@ -35,7 +45,10 @@ public:
 
 	static QString		GetVersion();
 
-	SB_PROGRESS			RecoverFiles(const QString& BoxName, const QList<QPair<QString, QString>>& FileList, int Action = 0);
+	bool				IsWFPEnabled() const;
+
+	SB_PROGRESS			RecoverFiles(const QString& BoxName, const QList<QPair<QString, QString>>& FileList, QWidget* pParent, int Action = 0);
+	SB_PROGRESS			CheckFiles(const QString& BoxName, const QStringList& Files);
 
 	enum EDelMode {
 		eDefault,
@@ -43,11 +56,11 @@ public:
 		eForDelete
 	};
 
-	SB_STATUS			DeleteBoxContent(const CSandBoxPtr& pBox, EDelMode Mode, bool DeleteShapshots = true);
+	SB_STATUS			DeleteBoxContent(const CSandBoxPtr& pBox, EDelMode Mode, bool DeleteSnapshots = true);
 
 	SB_STATUS			AddAsyncOp(const CSbieProgressPtr& pProgress, bool bWait = false, const QString& InitialMsg = QString());
 	static QString		FormatError(const SB_STATUS& Error);
-	static void			CheckResults(QList<SB_STATUS> Results);
+	static void			CheckResults(QList<SB_STATUS> Results, bool bAsync = false);
 
 	static QIcon		GetIcon(const QString& Name, int iAction = 1);
 
@@ -62,13 +75,15 @@ public:
 	CSbieView*			GetBoxView() { return m_pBoxView; }
 	CFileView*			GetFileView() { return m_pFileView; }
 
+	int					SafeExec(QDialog* pDialog);
+
 	bool				RunSandboxed(const QStringList& Commands, QString BoxName = QString(), const QString& WrkDir = QString());
 
 	QIcon				GetBoxIcon(int boxType, bool inUse = false);// , bool inBusy = false);
 	QRgb				GetBoxColor(int boxType) { return m_BoxColors[boxType]; }
 	QIcon				GetColorIcon(QColor boxColor, bool inUse = false/*, bool bOut = false*/);
 	QIcon				MakeIconBusy(const QIcon& Icon, int Index = 0);
-	QIcon				MakeIconRecycle(const QIcon& Icon);
+	QIcon				IconAddOverlay(const QIcon& Icon, const QString& Name, int Size = 24);
 	QString				GetBoxDescription(int boxType);
 	
 	bool				CheckCertificate(QWidget* pWidget);
@@ -81,6 +96,8 @@ public:
 signals:
 	void				CertUpdated();
 
+	void				Closed();
+
 protected:
 	friend class COnlineUpdater;
 	SB_RESULT(void*)	ConnectSbie();
@@ -88,9 +105,10 @@ protected:
 	SB_STATUS			DisconnectSbie();
 	SB_RESULT(void*)	StopSbie(bool andRemove = false);
 
-	static void			RecoverFilesAsync(const CSbieProgressPtr& pProgress, const QString& BoxName, const QList<QPair<QString, QString>>& FileList, int Action = 0);
+	static void			RecoverFilesAsync(QPair<const CSbieProgressPtr&,QWidget*> pParam, const QString& BoxName, const QList<QPair<QString, QString>>& FileList, const QStringList& Checkers, int Action = 0);
+	static void			CheckFilesAsync(const CSbieProgressPtr& pProgress, const QString& BoxName, const QStringList &Files, const QStringList& Checkers);
 
-	QIcon				GetTrayIcon(bool isConnected = true);
+	QIcon				GetTrayIcon(bool isConnected = true, bool bSun = false);
 	QString				GetTrayText(bool isConnected = true);
 
 	void				CheckSupport();
@@ -150,7 +168,7 @@ public slots:
 	void				OnFileToRecover(const QString& BoxName, const QString& FilePath, const QString& BoxPath, quint32 ProcessId);
 	void				OnFileRecovered(const QString& BoxName, const QString& FilePath, const QString& BoxPath);
 
-	bool				OpenRecovery(const CSandBoxPtr& pBox, bool& DeleteShapshots, bool bCloseEmpty = false);
+	bool				OpenRecovery(const CSandBoxPtr& pBox, bool& DeleteSnapshots, bool bCloseEmpty = false);
 	class CRecoveryWindow*	ShowRecovery(const CSandBoxPtr& pBox, bool bFind = true);
 
 	void				UpdateSettings(bool bRebuildUI);
@@ -168,6 +186,7 @@ public slots:
 
 	void				OnBoxAdded(const CSandBoxPtr& pBox);
 	void				OnBoxClosed(const CSandBoxPtr& pBox);
+	void				OnBoxCleaned(CSandBoxPlus* pBoxEx);
 
 	void				OnStartMenuChanged();
 
@@ -175,7 +194,7 @@ public slots:
 	void				OpenUrl(const QString& url) { OpenUrl(QUrl(url)); }
 	void				OpenUrl(const QUrl& url);
 
-	int					ShowQuestion(const QString& question, const QString& checkBoxText, bool* checkBoxSetting, int buttons, int defaultButton, int type);
+	int					ShowQuestion(const QString& question, const QString& checkBoxText, bool* checkBoxSetting, int buttons, int defaultButton, int type, QWidget* pParent);
 	void				ShowMessage(const QString& message, int type);
 
 	void				OnBoxMenu(const QPoint &);
@@ -241,7 +260,7 @@ private:
 	void				CreateMaintenanceMenu();
 	void				CreateViewBaseMenu();
 	void				CreateHelpMenu(bool bAdvanced);
-	void				CreateToolBar();
+	void				CreateToolBar(bool bRebuild);
 	void				CreateLabel();
 	void				CreateView(int iViewMode);
 	void				CreateTrayIcon();
@@ -255,10 +274,30 @@ private:
 
 	void				UpdateState();
 
-	void				EnumBoxLinks(QMap<QString, QMap<QString, QString> >& BoxLinks, const QString& Prefix, const QString& Folder, bool bWithSubDirs = true);
+	struct SBoxLink {
+		QString RelPath; // key
+		QString FullPath;
+		QString Target;
+	};
+
+	void				EnumBoxLinks(QMap<QString, QMap<QString, SBoxLink> >& BoxLinks, const QString& Prefix, const QString& Folder, bool bWithSubDirs = true);
 	void				CleanupShortcutPath(const QString& Path);
 	void				DeleteShortcut(const QString& Path);
-	void				CleanUpStartMenu(QMap<QString, QMap<QString, QString> >& BoxLinks);
+	void				CleanUpStartMenu(QMap<QString, QMap<QString, SBoxLink> >& BoxLinks);
+
+	QSet<QString>		GetToolBarItemsConfig();
+	void				SetToolBarItemsConfig(const QSet<QString>& items);
+	QList<ToolBarAction> GetAvailableToolBarActions();
+	void                CreateToolBarConfigMenu(const QList<ToolBarAction>& actions, const QSet<QString>& currentSet);
+	void				OnToolBarMenuItemClicked(const QString& scriptName);
+	void				OnResetToolBarMenuConfig();
+
+	const QString       ToolBarConfigKey = "UIConfig/ToolBarItems";
+
+	// per 1.9.3 menu. no whitespace!
+	const QStringList	DefaultToolBarItems = QString(
+						  "Settings,KeepTerminated,CleanUpMenu,BrowseFiles,EditIni,EnableMonitor"
+						).split(',');
 
 	QWidget*			m_pMainWidget;
 	QVBoxLayout*		m_pMainLayout;
@@ -294,6 +333,7 @@ private:
 	QAction*			m_pDisableForce2;
 	QAction*			m_pDisableRecovery;
 	QAction*			m_pDisableMessages;
+	QAction*			m_pDismissUpdate;
 	QMenu*				m_pMaintenance;
 	QAction*			m_pConnect;
 	QAction*			m_pDisconnect;
@@ -323,6 +363,9 @@ private:
 	QAction*			m_pCleanUpTrace;
 	QAction*			m_pCleanUpRecovery;
 	QToolButton*		m_pCleanUpButton;
+	QToolButton*		m_pNewBoxButton;
+	QToolButton*		m_pEditIniButton;
+	//QToolButton*		m_pEditButton;
 	QAction*			m_pKeepTerminated;
 	QAction*			m_pShowAllSessions;
 	QAction*			m_pArrangeGroups;
@@ -332,6 +375,8 @@ private:
 	QAction*			m_pMenuResetMsgs;
 	QAction*			m_pMenuResetGUI;
 	QAction*			m_pEditIni;
+	QAction*			m_pEditIni2;
+	QAction*			m_pEditIni3;
 	QAction*			m_pReloadIni;
 	QAction*			m_pEnableMonitoring;
 
@@ -339,7 +384,7 @@ private:
 	QLabel*				m_pLabel;
 
 	QMenu*				m_pMenuHelp;
-	QAction*			m_pSupport;
+	//QAction*			m_pSupport;
 	QAction*			m_pContribution;
 	QAction*			m_pForum;
 	QAction*			m_pManual;
@@ -347,6 +392,7 @@ private:
 	QAction*			m_pAbout;
 	QAction*			m_pAboutQt;
 
+	QLabel*				m_pTraceInfo;
 	QLabel*				m_pDisabledForce;
 	QLabel*				m_pDisabledRecovery;
 	QLabel*				m_pDisabledMessages;
@@ -362,8 +408,9 @@ private:
 	int					m_iTrayPos;
 	//QMenu*				m_pBoxMenu;
 	bool				m_bIconEmpty;
-	bool				m_bIconDisabled;
+	int					m_iIconDisabled;
 	bool				m_bIconBusy;
+	bool				m_bIconSun;
 	int					m_iDeletingContent;
 
 	bool				m_bExit;
