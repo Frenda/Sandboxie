@@ -365,12 +365,12 @@ spanish.UninstallTaskLabel4=Eliminar archivos de &configuración%nSeleccione est
 spanish.UninstallTaskLabel5=Eliminar archivos de configuración y las &sandboxes%nSeleccione esta opción para eliminar todos los archivos de configuración y las sandboxes, incluida la carpeta Sandbox ubicada en rutas personalizadas mediante FileRootPath.
 
 ; Swedish
-swedish.AddSandboxedMenu=Lägg till - Kör sandlådad, till snabbmenyn
-swedish.AddSandboxedBrowser=Lägg till skrivbordsgenväg för att starta webläsaren under Sandboxie
+swedish.AddSandboxedMenu=Lägg till Kör sandlådad, till snabbmenyn
+swedish.AddSandboxedBrowser=Lägg till skrivbordsgenväg för att starta webbläsaren under Sandboxie
 swedish.SandboxieStartMenu1=Kör valfritt program sandlådat
-swedish.SandboxieStartMenu2=Kör webläsaren sandlådad
+swedish.SandboxieStartMenu2=Kör webbläsaren sandlådad
 swedish.SandboxieStartMenu3=Sandboxie startmeny
-swedish.SandboxedBrowser=Sandlådad webläsare
+swedish.SandboxedBrowser=Sandlådad webbläsare
 swedish.CustomPageLabel1=Välj installationstyp
 swedish.CustomPageLabel2=Hur ska installeringen ske
 swedish.CustomPageLabel3=Välj installationsläget
@@ -384,7 +384,7 @@ swedish.UninstallTaskLabel1=Välj avinstallationstyp
 swedish.UninstallTaskLabel2=Hur vill du avinstallera Sandboxie-Plus?
 swedish.UninstallTaskLabel3=&Behåll konfigureringsfiler och sandlådor%nDetta är det rekommenderade alternativet om du tänker installera om Sandboxie-Plus, men vill behålla dina konfigurationsfiler och sandlådor.
 swedish.UninstallTaskLabel4=Ta bort &konfigurationsfilerna%nVälj detta alternativ för att ta bort Sandboxie.ini och Sandboxie-Plus.ini:s konfigurationsfiler men behålla sandlådorna oförändrade.
-swedish.UninstallTaskLabel5=Ta bort konfigurationsfiler och &sandlådor%nVälj detta alternativ för att ta bort alla konfigurationsfiler och sandlådor, även sandlådemappen lokaliserad i anpassade sökvägar med filrotsökvägen.
+swedish.UninstallTaskLabel5=Ta bort konfigurationsfiler och &sandlådor%nVälj detta alternativ för att ta bort alla konfigurationsfiler och sandlådor, även sandlådemappen lokaliserad i anpassade sökvägar med fil-root sökvägen.
 
 ; Turkish
 turkish.AddSandboxedMenu=Bağlam menüsüne "Korumalı Alanda Çalıştır" seçeneği ekle
@@ -407,7 +407,7 @@ turkish.UninstallTaskLabel2=Sandboxie-Plus'ı nasıl kaldırmak istersiniz?
 turkish.UninstallTaskLabel3=Yapılandırma dosyalarını ve korumalı alanları &sakla%nYapılandırma dosyalarınızı ve korumalı alanlarınızı saklarken Sandboxie-Plus'ı yeniden yüklemeyi planlıyorsanız, bu en çok önerilen seçenektir.
 turkish.UninstallTaskLabel4=&Yapılandırma dosyalarını kaldır%nSandboxie.ini ve Sandboxie-Plus.ini yapılandırma dosyalarını, korumalı alanları değiştirmeden kaldırmak için bunu seçin.
 turkish.UninstallTaskLabel5=Yapılandırma dosyalarını ve &korumalı alanları kaldır%nFileRootPath ile özel yollarda bulunan Sandbox klasörü dahil tüm yapılandırma dosyalarını ve korumalı alanları kaldırmak için bunu seçin.
-turkish.RefreshBuild=En son Templates.ini ve çevirileri indirin
+turkish.RefreshBuild=En son Templates.ini ve çeviriler indirilsin
 
 ; Ukrainian
 ukrainian.AddSandboxedMenu=Додати "Виконати в пісочниці" в контекстне меню
