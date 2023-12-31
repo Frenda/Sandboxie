@@ -1381,25 +1381,45 @@ QString CSettingsWindow::GetCertLevel()
 
 void CSettingsWindow::UpdateUpdater()
 {
+	bool bOk = (g_CertInfo.active && !g_CertInfo.expired);
 	//ui.radLive->setEnabled(false);
-	if (!ui.chkAutoUpdate->isChecked()) {
+	if (!ui.chkAutoUpdate->isChecked()) 
+	{
 		ui.cmbInterval->setEnabled(false);
 		ui.cmbUpdate->setEnabled(false);
 		ui.cmbRelease->setEnabled(false);
 		ui.lblRevision->setText(QString());
+		ui.lblRelease->setText(QString());
 	}
-	else {
+	else 
+	{
 		ui.cmbInterval->setEnabled(true);
-		if (ui.radStable->isChecked() && (!g_CertInfo.active || g_CertInfo.expired)) {
+
+		bool bAllowAuto;
+		if (ui.radStable->isChecked() && !bOk) {
 			ui.cmbUpdate->setEnabled(false);
 			ui.cmbUpdate->setCurrentIndex(ui.cmbUpdate->findData("ignore"));
-			ui.lblRevision->setText(tr("Supporter certificate required"));
-		} 
-		else {
+
+			ui.lblRevision->setText(tr("Supporter certificate required for access"));
+			bAllowAuto = false;
+		} else {
 			ui.cmbUpdate->setEnabled(true);
+
 			ui.lblRevision->setText(QString());
+			bAllowAuto = true;
 		}
+
 		ui.cmbRelease->setEnabled(true);
+		QStandardItemModel* model = qobject_cast<QStandardItemModel*>(ui.cmbRelease->model());
+		for (int i = 1; i < ui.cmbRelease->count(); i++) {
+			QStandardItem* item = model->item(i);
+			item->setFlags(bAllowAuto ? (item->flags() | Qt::ItemIsEnabled) : (item->flags() & ~Qt::ItemIsEnabled));
+		}
+
+		if(!bAllowAuto)
+			ui.lblRelease->setText(tr("Supporter certificate required for automation"));
+		else
+			ui.lblRelease->setText(QString());
 	}
 
 	OnOptChanged();

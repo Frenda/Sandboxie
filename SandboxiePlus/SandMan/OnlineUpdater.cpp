@@ -294,17 +294,27 @@ void COnlineUpdater::LoadState()
 
 QString COnlineUpdater::GetOnNewUpdateOption() const
 {
+	QString OnNewUpdate = theConf->GetString("Options/OnNewUpdate", "ignore");
+
 	QString ReleaseChannel = theConf->GetString("Options/ReleaseChannel", "stable");
-	if (ReleaseChannel != "preview" && (!g_CertInfo.active || g_CertInfo.expired)) // allow revisions for previwe channel
+	if (ReleaseChannel != "preview" && (!g_CertInfo.active || g_CertInfo.expired)) // without active cert, allow revisions for preview channel
 		return "ignore"; // this service requires a valid certificate
-	return theConf->GetString("Options/OnNewUpdate", "ignore");
+
+	return OnNewUpdate;
 }
 
 QString COnlineUpdater::GetOnNewReleaseOption() const
 {
 	QString OnNewRelease = theConf->GetString("Options/OnNewRelease", "download");
-	if ((g_CertInfo.active && g_CertInfo.expired) && OnNewRelease == "install")
-		return "download"; // disable auto update on an active but expired personal certificate
+
+	if (OnNewRelease == "install" || OnNewRelease == "download") {
+		QString ReleaseChannel = theConf->GetString("Options/ReleaseChannel", "stable");
+		if (ReleaseChannel != "preview" && (!g_CertInfo.active || g_CertInfo.expired)) // without active cert, allow automated updates only for preview channel
+			return "notify"; // this service requires a valid certificate
+	}
+
+	//if ((g_CertInfo.active && g_CertInfo.expired) && OnNewRelease == "install")
+	//	return "download"; // disable auto update on an active but expired personal certificate
 	return OnNewRelease;
 }
 
@@ -418,6 +428,7 @@ void COnlineUpdater::OnUpdateData(const QVariantMap& Data, const QVariantMap& Pa
 	}
 
 	bool bNothing = true;
+	bool bAuto = m_CheckMode != eManual;
 
 	if (HandleUserMessage(Data))
 		bNothing = false;
@@ -432,7 +443,7 @@ void COnlineUpdater::OnUpdateData(const QVariantMap& Data, const QVariantMap& Pa
 		bNothing = false;
 	}
 
-	if (m_CheckMode != eManual) {
+	if (bAuto) {
 		int UpdateInterval = theConf->GetInt("Options/UpdateInterval", UPDATE_INTERVAL); // in seconds
 		theConf->SetValue("Options/NextCheckForUpdates", QDateTime::currentDateTime().addSecs(UpdateInterval).toSecsSinceEpoch());
 	}
@@ -446,6 +457,7 @@ bool COnlineUpdater::HandleUpdate()
 {
 	QString PendingUpdate;
 
+	QString OnNewRelease = GetOnNewReleaseOption();
 	bool bNewRelease = false;
 	QVariantMap Release = m_UpdateData["release"].toMap();
 	QString ReleaseStr = Release["version"].toString();
@@ -457,7 +469,6 @@ bool COnlineUpdater::HandleUpdate()
 	}
 
 	QString OnNewUpdate = GetOnNewUpdateOption();
-
 	bool bNewUpdate = false;
 	QVariantMap Update = m_UpdateData["update"].toMap();
 	QString UpdateStr = Update["version"].toString();
@@ -486,7 +497,8 @@ bool COnlineUpdater::HandleUpdate()
 	// solution: apply updates silently, then prompt to install new release, else prioritize installing new releases over updating the existing one
 	//
 
-	QString OnNewRelease = GetOnNewReleaseOption();
+	bool bAllowAuto = g_CertInfo.active && !g_CertInfo.expired; // To use automatic updates a valid certificate is required
+
 	bool bCanRunInstaller = (m_CheckMode == eAuto && OnNewRelease == "install");
 	bool bIsInstallerReady = false;
 	if (bNewRelease) 
@@ -502,7 +514,7 @@ bool COnlineUpdater::HandleUpdate()
 			// clear when not up to date
 			theConf->DelValue("Updater/InstallerVersion");
 
-			if ((bCanRunInstaller || (m_CheckMode == eAuto && OnNewRelease == "download")) || AskDownload(Release))
+			if ((bCanRunInstaller || (m_CheckMode == eAuto && OnNewRelease == "download")) || AskDownload(Release, bAllowAuto))
 			{
 				if (DownloadInstaller(Release, m_CheckMode == eManual))
 					return true;
@@ -524,7 +536,7 @@ bool COnlineUpdater::HandleUpdate()
 				// clear when not up to date
 				theConf->DelValue("Updater/UpdateVersion");
 
-				if ((bCanApplyUpdate || (m_CheckMode == eAuto && OnNewUpdate == "download")) || AskDownload(Update))
+				if ((bCanApplyUpdate || (m_CheckMode == eAuto && OnNewUpdate == "download")) || AskDownload(Update, true))
 				{
 					if (DownloadUpdate(Update, m_CheckMode == eManual))
 						return true;
@@ -555,7 +567,7 @@ bool COnlineUpdater::HandleUpdate()
 	return bNewRelease || bNewUpdate;
 }
 
-bool COnlineUpdater::AskDownload(const QVariantMap& Data)
+bool COnlineUpdater::AskDownload(const QVariantMap& Data, bool bAuto)
 {
 	QString VersionStr = MakeVersionStr(Data);
 
@@ -568,12 +580,25 @@ bool COnlineUpdater::AskDownload(const QVariantMap& Data)
 	QVariantMap Installer = Data["installer"].toMap();
 	QString DownloadUrl = Installer["downloadUrl"].toString();
 
-	if (!DownloadUrl.isEmpty())
+	enum EAction
+	{
+		eNone = 0,
+		eDownload,
+		eNotify,
+	} Action = eNone;
+
+	if (bAuto && !DownloadUrl.isEmpty()) {
+		Action = eDownload;
 		FullMessage += tr("<p>Do you want to download the installer?</p>");
-	else if(Data.contains("files"))
+	}
+	else if (bAuto && Data.contains("files")) {
+		Action = eDownload;
 		FullMessage += tr("<p>Do you want to download the updates?</p>");
-	else if (!UpdateUrl.isEmpty())
-		FullMessage += tr("<p>Do you want to go to the <a href=\"%1\">update page</a>?</p>").arg(UpdateUrl);
+	}
+	else if (!UpdateUrl.isEmpty()) {
+		Action = eNotify;
+		FullMessage += tr("<p>Do you want to go to the <a href=\"%1\">download page</a>?</p>").arg(UpdateUrl);
+	}
 
 	CCheckableMessageBox mb(theGUI);
 	mb.setWindowTitle("Sandboxie-Plus");
@@ -584,18 +609,18 @@ bool COnlineUpdater::AskDownload(const QVariantMap& Data)
 	mb.setCheckBoxText(tr("Don't show this update anymore."));
 	mb.setCheckBoxVisible(m_CheckMode != eManual);
 
-	if (!UpdateUrl.isEmpty() || !DownloadUrl.isEmpty() || Data.contains("files")) {
+	if (Action != eNone) {
 		mb.setStandardButtons(QDialogButtonBox::Yes | QDialogButtonBox::No | QDialogButtonBox::Cancel);
 		mb.setDefaultButton(QDialogButtonBox::Yes);
-	}
-	else
+	} else
 		mb.setStandardButtons(QDialogButtonBox::Ok);
 
 	mb.exec();
 
 	if (mb.clickedStandardButton() == QDialogButtonBox::Yes)
 	{
-		if (!DownloadUrl.isEmpty() || Data.contains("files")) {
+		if (Action == eDownload) 
+		{
 			m_CheckMode = eManual;
 			return true;
 		}
@@ -604,7 +629,8 @@ bool COnlineUpdater::AskDownload(const QVariantMap& Data)
 	}
 	else 
 	{
-		if (mb.clickedStandardButton() == QDialogButtonBox::Cancel) {
+		if (mb.clickedStandardButton() == QDialogButtonBox::Cancel) 
+		{
 			theConf->SetValue("Updater/PendingUpdate", ""); 
 			theGUI->UpdateLabel();
 		}
@@ -954,7 +980,7 @@ bool COnlineUpdater::RunInstaller(bool bSilent)
 
 bool COnlineUpdater::RunInstaller2(const QString& FilePath, bool bSilent)
 {
-	if (bSilent) 
+	if (bSilent && !theGUI->IsFullyPortable()) 
 	{
 		QStringList Params;
 		Params.append("run_setup");
@@ -975,8 +1001,11 @@ bool COnlineUpdater::RunInstaller2(const QString& FilePath, bool bSilent)
 
 	std::wstring wFile = QString(FilePath).replace("/", "\\").toStdWString();
 	std::wstring wParams;
+	if(theGUI->IsFullyPortable())
+		wParams = L"/PORTABLE=1";
 #ifndef _DEBUG
-	wParams = L"/SILENT";
+	else
+		wParams = L"/SILENT";
 #endif
 
 	return RunElevated(wFile, wParams) == 0;
