@@ -2,7 +2,7 @@
 void CSandMan::OnFileToRecover(const QString& BoxName, const QString& FilePath, const QString& BoxPath, quint32 ProcessId)
 {
 	CSandBoxPtr pBox = theAPI->GetBoxByName(BoxName);
-	if ((!pBox.isNull() && pBox.objectCast<CSandBoxPlus>()->IsRecoverySuspended()) || IsDisableRecovery())
+	if (pBox.isNull() || pBox.objectCast<CSandBoxPlus>()->IsRecoverySuspended() || IsDisableRecovery())
 		return;
 
 	if (theConf->GetBool("Options/InstantRecovery", true))
@@ -357,6 +357,6 @@ void CSandMan::OnRecoveryLog()
 {
 	if (!m_pRecoveryLogWnd->isVisible()) {
 		m_pRecoveryLogWnd->setWindowFlag(Qt::WindowStaysOnTopHint, theGUI->IsAlwaysOnTop());
-		SafeShow(m_pRecoveryLogWnd);
+		CSandMan::SafeShow(m_pRecoveryLogWnd);
 	}
 }

@@ -541,8 +541,8 @@ _FX NTSTATUS Process_Api_QueryInfo(PROCESS *proc, ULONG64 *parms)
         } else if (args->info_type.val == 'root') {
             
             //
-            // When querygin a sandboxed process API_QUERY_PROCESS_PATH return the reparsed file root path
-            // this info class is used to retrive the raw i.e. not reparsed file root path
+            // When querying a sandboxed process API_QUERY_PROCESS_PATH return the reparsed file root path
+            // this info class is used to retrieve the raw i.e. not reparsed file root path
             // 
             // Note: API_QUERY_BOX_PATH when invoked by a sandboxed process also returns its reparsed file root path
             //
@@ -1123,6 +1123,65 @@ _FX NTSTATUS Process_Api_Enum(PROCESS *proc, ULONG64 *parms)
         return status;
 
     *user_count = count;
+
+    return status;
+}
+
+
+//---------------------------------------------------------------------------
+// Process_Api_Enum
+//---------------------------------------------------------------------------
+
+
+_FX NTSTATUS Process_Api_Kill(PROCESS *proc, ULONG64 *parms)
+{
+    NTSTATUS status;
+    HANDLE user_pid_parm;
+    HANDLE handle = NULL;
+    PEPROCESS ProcessObject = NULL;
+    PROCESS *proc2;
+
+    //
+    // security check, only service is allowed this call
+    //
+
+    if (proc || (PsGetCurrentProcessId() != Api_ServiceProcessId))
+        return STATUS_NOT_IMPLEMENTED;
+
+    //
+    // first parameter is pid
+    //
+
+    user_pid_parm = (HANDLE)parms[1];
+
+    if (! user_pid_parm)
+        return STATUS_INVALID_CID;
+
+    //
+    // security check, target must be a sandboxed process
+    //
+
+    proc2 = Process_Find(user_pid_parm, NULL);
+    if (! proc2)
+        return STATUS_ACCESS_DENIED;
+
+    //
+    // open process, obtain handle and terminate
+    //
+
+    status = PsLookupProcessByProcessId(user_pid_parm, &ProcessObject);
+
+    if (NT_SUCCESS(status)) {
+
+        status = ObOpenObjectByPointer(ProcessObject, OBJ_KERNEL_HANDLE, NULL, PROCESS_TERMINATE, NULL, KernelMode, &handle);
+        ObDereferenceObject(ProcessObject);
+
+        if (NT_SUCCESS(status)) {
+
+            ZwTerminateProcess(handle, DBG_TERMINATE_PROCESS);
+            ZwClose(handle);
+        }
+    }
 
     return status;
 }

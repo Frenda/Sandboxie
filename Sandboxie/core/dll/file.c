@@ -118,6 +118,9 @@ SBIEDLL_EXPORT NTSTATUS File_GetName(
     HANDLE RootDirectory, UNICODE_STRING *ObjectName,
     WCHAR **OutTruePath, WCHAR **OutCopyPath, ULONG *OutFlags);
 
+static WCHAR *File_TranslateDosToNtPath2(
+    const WCHAR *DosPath, ULONG DosPathLen);
+
 static WCHAR *File_GetName_TranslateSymlinks(
     THREAD_DATA *TlsData, const WCHAR *objname_buf, ULONG objname_len,
     BOOLEAN *translated);
@@ -262,8 +265,17 @@ static NTSTATUS File_NtDeleteFile(OBJECT_ATTRIBUTES *ObjectAttributes);
 
 static NTSTATUS File_NtDeleteFileImpl(OBJECT_ATTRIBUTES *ObjectAttributes);
 
+static WCHAR *File_ConcatPath2(
+    const WCHAR *Path1, ULONG Path1Len, const WCHAR *Path2, ULONG Path2Len);
+
+static WCHAR* File_CanonizePath(
+    const wchar_t* absolute_path, ULONG abs_path_len, const wchar_t* relative_path, ULONG rel_path_len);
+
+static NTSTATUS File_OpenForRenameFile(
+    HANDLE* pSourceHandle, const WCHAR *TruePath);
+
 static NTSTATUS File_RenameFile(
-    HANDLE FileHandle, FILE_RENAME_INFORMATION *info);
+    HANDLE FileHandle, void *info, BOOLEAN LinkOp);
 
 static BOOLEAN File_RecordRecover(HANDLE FileHandle, const WCHAR *TruePath);
 
@@ -363,9 +375,9 @@ static WCHAR *File_PublicUser = NULL;
 static ULONG File_PublicUserLen = 0;
 
 static BOOLEAN File_DriveAddSN = FALSE;
+static BOOLEAN File_UseVolumeGuid = FALSE;
 
 BOOLEAN File_Delete_v2 = FALSE;
-static BOOLEAN File_NoReparse = FALSE;
 
 static WCHAR *File_AltBoxPath = NULL;
 static ULONG File_AltBoxPathLen = 0;
@@ -438,6 +450,7 @@ _FX NTSTATUS File_GetCopyPathImpl(WCHAR* TruePath, WCHAR **OutCopyPath, ULONG *O
     ULONG length;
     WCHAR* name;
     const FILE_DRIVE *drive;
+    const FILE_GUID* guid;
     ULONG PrefixLength;
     
     length = wcslen(TruePath);
@@ -571,32 +584,54 @@ _FX NTSTATUS File_GetCopyPathImpl(WCHAR* TruePath, WCHAR **OutCopyPath, ULONG *O
 
         ULONG drive_len;
 
+        guid = NULL;
         drive = File_GetDriveForPath(TruePath, length);
         if (drive)
             drive_len = drive->len;
         else
             drive = File_GetDriveForUncPath(TruePath, length, &drive_len);
+        if (!drive && File_UseVolumeGuid)
+            guid = File_GetGuidForPath(TruePath, length);
 
-        if (drive) {
+        if (drive || guid) {
 
-            WCHAR drive_letter = drive->letter;
+            WCHAR drive_letter = 0;
+            WCHAR sn[10] = { 0 };
+            WCHAR drive_guid[38 + 1];
+
+            if (drive) {
+                drive_letter = drive->letter;
+                wcscpy(sn, drive->sn);
+            }
+            else { // if guid
+                wcscpy(drive_guid, guid->guid);
+                drive_len = guid->len;
+            }
 
             LeaveCriticalSection(File_DrivesAndLinks_CritSec);
 
             wmemcpy(name, _Drive, _DriveLen);
             name += _DriveLen;
-            *name = drive_letter;
-            ++name;
+            if (drive_letter) {
 
-            if (File_DriveAddSN && *drive->sn) {
-
-                *name = L'~';
+                *name = drive_letter;
                 ++name;
-                wcscpy(name, drive->sn);
-                name += 9;
-            }
+                
+                if (File_DriveAddSN && *sn) {
 
-            *name = L'\0';
+                    *name = L'~';
+                    ++name;
+                    wcscpy(name, sn);
+                    name += 9;
+                }
+
+                *name = L'\0';
+            }
+            else { // if guid
+
+                wcscpy(name, drive_guid);
+                name += wcslen(drive_guid); // = 38
+            }
 
             if (length == drive_len) {
 
@@ -669,6 +704,7 @@ _FX NTSTATUS File_GetTruePathImpl(ULONG length, WCHAR **OutTruePath, ULONG *OutF
     ULONG prefixLen = 0;
     WCHAR* name;
     const FILE_DRIVE *drive;
+    const FILE_GUID* guid;
 
 check_sandbox_prefix:
 
@@ -736,31 +772,48 @@ check_sandbox_prefix:
         _wcsnicmp(*OutTruePath, _Drive, _DriveLen - 1) == 0)
     {
         name = (*OutTruePath);
-        if (name[_DriveLen - 1] == L'\\')
-            drive = File_GetDriveForLetter(name[_DriveLen]);
-        else
-            drive = NULL;
 
-        if (! drive) {
+        drive = NULL;
+        guid = NULL;
+        if (name[_DriveLen - 1] == L'\\') {
+            if (name[_DriveLen] == L'{' && File_UseVolumeGuid)
+                guid = File_GetLinkForGuid(&name[_DriveLen]);
+            else
+                drive = File_GetDriveForLetter(name[_DriveLen]);
+        }
+            
+
+        if (drive) {
+
+            ULONG len = _DriveLen + 1; /* drive letter */
+
+            // skip any suffix after the drive letter
+            if (File_DriveAddSN) {
+                WCHAR* ptr = wcschr(*OutTruePath + _DriveLen + 1, L'\\');
+                if (!ptr) ptr = wcschr(*OutTruePath + _DriveLen + 1, L'\0');
+                len = (ULONG)(ptr - *OutTruePath);
+            }
+
+            File_GetName_FixTruePrefix(TlsData,
+                OutTruePath, &length, len,
+                drive->path, drive->len);
+        }
+        else if (guid) {
+
+            ULONG len = _DriveLen + 38; /* drive guid*/
+
+            File_GetName_FixTruePrefix(TlsData,
+                OutTruePath, &length, len,
+                guid->path, guid->len);
+        }
+        else {
+
             //
             // caller specified invalid path for \sandbox\drive\x
             //
             *OutTruePath = NULL;
             return STATUS_BAD_INITIAL_PC;
         }
-
-        ULONG len = _DriveLen + 1; /* drive letter */
-
-        // skip any suffix after the drive letter
-        if (File_DriveAddSN) {
-            WCHAR* ptr = wcschr(*OutTruePath + _DriveLen + 1, L'\\');
-            if (!ptr) ptr = wcschr(*OutTruePath + _DriveLen + 1, L'\0');
-            len = (ULONG)(ptr - *OutTruePath);
-        }
-
-        File_GetName_FixTruePrefix(TlsData,
-            OutTruePath, &length, len,
-            drive->path, drive->len);
 
         if (p_convert_links_again) *p_convert_links_again = TRUE;
 
@@ -883,11 +936,11 @@ _FX NTSTATUS File_GetName(
     ULONG objname_len;
     WCHAR *objname_buf;
     const FILE_DRIVE *drive;
+    const FILE_GUID* guid;
     BOOLEAN have_trailing_backslash, add_trailing_backslash;
     BOOLEAN have_tilde;
     BOOLEAN convert_links_again;
     BOOLEAN is_boxed_path;
-    BOOLEAN free_true_path;
 
 #ifdef WOW64_FS_REDIR
     BOOLEAN convert_wow64_link = (File_Wow64FileLink) ? TRUE : FALSE;
@@ -917,8 +970,7 @@ _FX NTSTATUS File_GetName(
     }
 
     drive = NULL;
-
-    free_true_path = FALSE;
+    guid = NULL;
 
     //
     // if a root handle is specified, we query the full name of the
@@ -1090,9 +1142,13 @@ _FX NTSTATUS File_GetName(
             // the next section of code from trying to translate symlinks
             //
 
+            guid = NULL;
             drive = File_GetDriveForPath(
                                 objname_buf, objname_len / sizeof(WCHAR));
-            if (drive) {
+            if(!drive && File_UseVolumeGuid)
+                guid = File_GetGuidForPath(objname_buf, objname_len / sizeof(WCHAR));
+
+            if (drive || guid) {
 
                 name = Dll_GetTlsNameBuffer(
                         TlsData, TRUE_NAME_BUFFER,
@@ -1106,7 +1162,7 @@ _FX NTSTATUS File_GetName(
             }
         }
 
-        if (drive) {
+        if (drive || guid) {
 
             File_GetName_ConvertLinks(
                 TlsData, OutTruePath, convert_wow64_link);
@@ -1202,7 +1258,7 @@ _FX NTSTATUS File_GetName(
     // if this is a named pipe or mail slot, return special status
     //
 
-    if ((! drive) && File_IsNamedPipe(*OutTruePath, NULL)) {
+    if (!drive && !guid && File_IsNamedPipe(*OutTruePath, NULL)) {
 
         return STATUS_BAD_INITIAL_PC;
     }
@@ -1309,16 +1365,17 @@ check_sandbox_prefix:
 
         if(File_FindBoxPrefix(TruePath))
             is_boxed_path = TRUE;
+        
+        name = Dll_GetTlsNameBuffer(
+                TlsData, TRUE_NAME_BUFFER, (length + 1) * sizeof(WCHAR));
+        wmemcpy(name, TruePath, length + 1);
+
+        Dll_Free(TruePath);
+
+        TruePath = name;
+        *OutTruePath = TruePath;
+
         if (is_boxed_path) {
-
-            name = Dll_GetTlsNameBuffer(
-                    TlsData, TRUE_NAME_BUFFER, (length + 1) * sizeof(WCHAR));
-            wmemcpy(name, TruePath, length + 1);
-
-            Dll_Free(TruePath);
-
-            TruePath = name;
-            *OutTruePath = TruePath;
             convert_links_again = FALSE;
 
             goto check_sandbox_prefix;
@@ -1328,8 +1385,6 @@ check_sandbox_prefix:
         // otherwise test the reparsed path for open/closed paths and
         // then continue to create the copy path
         //
-
-        free_true_path = TRUE;
 
         if (OutFlags) {
             ULONG mp_flags = File_MatchPath(TruePath, OutFlags);
@@ -1388,9 +1443,6 @@ check_sandbox_prefix:
         name[0] = L'\\';
         name[1] = L'\0';
     }
-
-    if (free_true_path)
-        Dll_Free(TruePath);
 
     //
     // debugging helper
@@ -2642,6 +2694,10 @@ _FX NTSTATUS File_NtCreateFileImpl(
 
                 SbieApi_MonitorPut2(MONITOR_PIPE, TruePath, FALSE);
 
+                Dll_PopTlsNameBuffer(TlsData);
+
+                TlsData->file_NtCreateFile_lock = FALSE;
+
                 return __sys_NtCreateFile(
                     FileHandle, DesiredAccess, ObjectAttributes, IoStatusBlock,
                     AllocationSize, FileAttributes, ShareAccess, CreateDisposition,
@@ -2651,6 +2707,12 @@ _FX NTSTATUS File_NtCreateFileImpl(
                 SbieApi_MonitorPut2(MONITOR_PIPE | MONITOR_DENY, TruePath, FALSE);
             }
         }
+    }
+
+    if (Dll_ApiTrace) {
+        WCHAR trace_str[2048];
+        ULONG len = Sbie_snwprintf(trace_str, 2048, L"File_NtCreateFileImpl %s DesiredAccess=0x%08X CreateDisposition=0x%08X CreateOptions=0x%08X", TruePath, DesiredAccess, CreateDisposition, CreateOptions);
+        SbieApi_MonitorPut2Ex(MONITOR_APICALL | MONITOR_TRACE, len, trace_str, FALSE, FALSE);
     }
 
     SkipOriginalTry = (status == STATUS_BAD_INITIAL_PC);
@@ -3794,6 +3856,12 @@ ReparseLoop:
         status = GetExceptionCode();
     }
 
+    if (Dll_ApiTrace) {
+        WCHAR trace_str[2048];
+        ULONG len = Sbie_snwprintf(trace_str, 2048, L"File_NtCreateFileImpl status = 0x%08X", status);
+        SbieApi_MonitorPut2Ex(MONITOR_APICALL | MONITOR_TRACE, len, trace_str, FALSE, FALSE);
+    }
+
     SetLastError(LastError);
     return status;
 }
@@ -4025,7 +4093,7 @@ _FX NTSTATUS File_GetFileType(
     *FileType = 0;
 
     P_NtQueryFullAttributesFile pNtQueryFullAttributesFile = __sys_NtQueryFullAttributesFile;
-    // special case for File_InitRecoverFolders as its called bfore we hook those functions
+    // special case for File_InitRecoverFolders as it's called before we hook those functions
     if (!pNtQueryFullAttributesFile)
         pNtQueryFullAttributesFile = NtQueryFullAttributesFile;
 
@@ -5008,6 +5076,12 @@ _FX NTSTATUS File_NtQueryFullAttributesFileImpl(
         ObjectAttributes->RootDirectory, ObjectAttributes->ObjectName,
         &TruePath, &CopyPath, &FileFlags);
 
+    if (Dll_ApiTrace) {
+        WCHAR trace_str[2048];
+        ULONG len = Sbie_snwprintf(trace_str, 2048, L"File_NtQueryFullAttributesFileImpl %s", TruePath);
+        SbieApi_MonitorPut2Ex(MONITOR_APICALL | MONITOR_TRACE, len, trace_str, FALSE, FALSE);
+    }
+
     if (! NT_SUCCESS(status)) {
 
         if (status == STATUS_BAD_INITIAL_PC) {
@@ -5204,6 +5278,12 @@ _FX NTSTATUS File_NtQueryFullAttributesFileImpl(
         status = STATUS_OBJECT_NAME_INVALID;
     }
 
+    if (Dll_ApiTrace) {
+        WCHAR trace_str[2048];
+        ULONG len = Sbie_snwprintf(trace_str, 2048, L"File_NtQueryFullAttributesFileImpl status = 0x%08X", status);
+        SbieApi_MonitorPut2Ex(MONITOR_APICALL | MONITOR_TRACE, len, trace_str, FALSE, FALSE);
+    }
+
     Dll_PopTlsNameBuffer(TlsData);
     SetLastError(LastError);
     return status;
@@ -5397,14 +5477,24 @@ _FX NTSTATUS File_NtQueryInformationFile(
             // otherwise we do normal drive letter processing
             //
 
-            SbieDll_TranslateNtToDosPath(TruePath);
-            TruePathLen = wcslen(TruePath);
-            if (TruePathLen >= 2 && TruePath[1] == L':') {
-                if (TruePathLen == 2)
-                    TruePathLen = 0;
-                else {
-                    TruePath += 2;
-                    TruePathLen -= 2;
+            if (SbieDll_TranslateNtToDosPath(TruePath)) {
+                TruePathLen = wcslen(TruePath);
+                if (TruePathLen >= 2 && TruePath[1] == L':') {
+                    if (TruePathLen == 2)
+                        TruePathLen = 0;
+                    else {
+                        TruePath += 2;
+                        TruePathLen -= 2;
+                    }
+                }
+            }
+            else { // todo: fix-me this is not elegant
+                TruePathLen = wcslen(TruePath);
+                const FILE_GUID* guid = File_GetGuidForPath(TruePath, TruePathLen);
+                if (guid) {
+                    TruePath += guid->len;
+                    TruePathLen -= guid->len;
+                    LeaveCriticalSection(File_DrivesAndLinks_CritSec);
                 }
             }
         }
@@ -5514,6 +5604,12 @@ _FX ULONG File_GetFinalPathNameByHandleW(
         err = GetLastError();
     }
 
+    if (Dll_ApiTrace) {
+        WCHAR trace_str[2048];
+        ULONG len = Sbie_snwprintf(trace_str, 2048, L"File_GetFinalPathNameByHandleW %s", lpszFilePath);
+        SbieApi_MonitorPut2Ex(MONITOR_APICALL | MONITOR_TRACE, len, trace_str, FALSE, FALSE);
+    }
+
     SetLastError(err);
     return rc;
 }
@@ -5529,11 +5625,11 @@ _FX WCHAR *File_GetFinalPathNameByHandleW_2(WCHAR *TruePath, ULONG dwFlags)
     static const WCHAR *_DosPrefix = L"\\\\?\\UNC\\";
     const FILE_DRIVE *file_drive;
     const FILE_LINK *file_link;
-    const WCHAR *suffix;
+    const WCHAR *suffix, *suffix2;
     WCHAR *path;
     WCHAR *ReparsedPath;
     ULONG TruePath_len;
-    ULONG suffix_len;
+    ULONG suffix_len, suffix2_len;
     WCHAR drive_letter;
     BOOLEAN AddBackslash;
 
@@ -5630,6 +5726,7 @@ _FX WCHAR *File_GetFinalPathNameByHandleW_2(WCHAR *TruePath, ULONG dwFlags)
     ReparsedPath = NULL;
     AddBackslash = FALSE;
     drive_letter = 0;
+    suffix2 = NULL;
 
     file_link = File_FindPermLinksForMatchPath(TruePath, TruePath_len);
     if (file_link) {
@@ -5679,18 +5776,33 @@ _FX WCHAR *File_GetFinalPathNameByHandleW_2(WCHAR *TruePath, ULONG dwFlags)
 
             file_drive = File_GetDriveForPath(TruePath, TruePath_len);
             if (! file_drive) {
-                // release lock by File_FindPermLinksForMatchPath
-                LeaveCriticalSection(File_DrivesAndLinks_CritSec);
-                SetLastError(ERROR_PATH_NOT_FOUND);
-                return NULL;
+
+                file_drive = File_GetDriveForPath(file_link->src, file_link->src_len);
+                if (!file_drive) {
+
+                    // release lock by File_FindPermLinksForMatchPath
+                    LeaveCriticalSection(File_DrivesAndLinks_CritSec);
+                    SetLastError(ERROR_PATH_NOT_FOUND);
+                    return NULL;
+                }
+                else
+                {
+                    drive_letter = file_drive->letter;
+                    suffix = file_link->src + file_drive->len;
+                    suffix2 = TruePath + file_link->dst_len;
+
+                    // release lock by File_GetDriveForPath
+                    LeaveCriticalSection(File_DrivesAndLinks_CritSec);
+                }
             }
+            else
+            {
+                drive_letter = file_drive->letter;
+                suffix = TruePath + file_drive->len;
 
-            drive_letter = file_drive->letter;
-            suffix = TruePath + file_drive->len;
-
-            // release lock by File_GetDriveForPath
-            LeaveCriticalSection(File_DrivesAndLinks_CritSec);
-
+                // release lock by File_GetDriveForPath
+                LeaveCriticalSection(File_DrivesAndLinks_CritSec);
+            }
         }
 
         // release lock by File_FindPermLinksForMatchPath
@@ -5736,11 +5848,15 @@ _FX WCHAR *File_GetFinalPathNameByHandleW_2(WCHAR *TruePath, ULONG dwFlags)
     } else { // VOLUME_NAME_DOS
 
         suffix_len = wcslen(suffix);
-        path = Dll_AllocTemp((suffix_len + 16) * sizeof(WCHAR));
+        suffix2_len = suffix2 ? wcslen(suffix2) : 0;
+        path = Dll_AllocTemp((suffix_len + suffix2_len + 16) * sizeof(WCHAR));
         wmemcpy(path, _DosPrefix, 4);
         path[4] = drive_letter;
         path[5] = L':';
         wmemcpy(path + 6, suffix, suffix_len + 1);
+        if (suffix2)
+            wcscat(path, suffix2);
+
     }
 
     if (AddBackslash)
@@ -5937,7 +6053,7 @@ _FX NTSTATUS File_NtSetInformationFile(
     } else if ( FileInformationClass == FileRenameInformation ||
                 FileInformationClass == FileRenameInformationEx ) {
 
-        status = File_RenameFile(FileHandle, FileInformation);
+        status = File_RenameFile(FileHandle, FileInformation, FALSE);
 
     //
     // pipe state request on a proxy pipe
@@ -5954,6 +6070,41 @@ _FX NTSTATUS File_NtSetInformationFile(
         status = File_SetProxyPipe(
             FileHandle, IoStatusBlock,
             FileInformation, Length, FileInformationClass);
+    //
+    // link request
+    //
+
+    } else if ( FileInformationClass == FileLinkInformation ||
+                FileInformationClass == FileLinkInformationEx || 
+                FileInformationClass == FileHardLinkInformation ||
+                FileInformationClass == FileHardLinkFullIdInformation) {
+
+        if (FileInformationClass == FileLinkInformation || 
+            FileInformationClass == FileLinkInformationEx) {
+
+            status = File_RenameFile(FileHandle, FileInformation, TRUE);
+
+        }
+        else // todo
+        {
+            FillIoStatusBlock = FALSE;
+
+            status = __sys_NtSetInformationFile(
+                FileHandle, IoStatusBlock,
+                FileInformation, Length, FileInformationClass);
+        }
+
+        if (!NT_SUCCESS(status)) {
+            //
+            // we don't support hard links in the sandbox, but return
+            // STATUS_INVALID_DEVICE_REQUEST and hopefully the caller will
+            // invoke CopyFile instead.  dfsvc.exe (ClickOnce) does that.
+            //
+
+            status = STATUS_INVALID_DEVICE_REQUEST;
+
+            FillIoStatusBlock = TRUE;
+        }
 
     //
     // any other request
@@ -5966,20 +6117,6 @@ _FX NTSTATUS File_NtSetInformationFile(
         status = __sys_NtSetInformationFile(
             FileHandle, IoStatusBlock,
             FileInformation, Length, FileInformationClass);
-
-        if ((FileInformationClass == FileLinkInformation ||
-            FileInformationClass == FileHardLinkFullIdInformation)
-                && (! NT_SUCCESS(status))) {
-            //
-            // we don't support hard links in the sandbox, but return
-            // STATUS_INVALID_DEVICE_REQUEST and hopefully the caller will
-            // invoke CopyFile instead.  dfsvc.exe (ClickOnce) does that.
-            //
-
-            status = STATUS_INVALID_DEVICE_REQUEST;
-
-            FillIoStatusBlock = TRUE;
-        }
     }
 
     if (FillIoStatusBlock) {
@@ -6535,12 +6672,69 @@ _FX LONG File_RenameOpenFile(
 
 
 //---------------------------------------------------------------------------
+// File_OpenForRenameFile
+//---------------------------------------------------------------------------
+
+
+_FX NTSTATUS File_OpenForRenameFile(
+    HANDLE* pSourceHandle, const WCHAR *TruePath)
+{
+    THREAD_DATA *TlsData = Dll_GetTlsData(NULL);
+
+    NTSTATUS status;
+    OBJECT_ATTRIBUTES objattrs;
+    UNICODE_STRING objname;
+    IO_STATUS_BLOCK IoStatusBlock;
+
+    InitializeObjectAttributes(
+        &objattrs, &objname, OBJ_CASE_INSENSITIVE, NULL, Secure_NormalSD);
+
+    //
+    // open the file for write access.  this should cause the file
+    // to be migrated into the sandbox, including its parent directories
+    //
+
+    RtlInitUnicodeString(&objname, TruePath);
+
+    ++TlsData->file_dont_strip_write_access;
+
+    status = NtCreateFile(
+        pSourceHandle, FILE_GENERIC_WRITE | DELETE, &objattrs,
+        &IoStatusBlock, NULL, 0, FILE_SHARE_VALID_FLAGS,
+        FILE_OPEN, FILE_SYNCHRONOUS_IO_NONALERT, NULL, 0);
+
+    if (status == STATUS_SHARING_VIOLATION ||
+        status == STATUS_ACCESS_DENIED) {
+
+        //
+        // Windows Mail opens *.eml files with a combination of
+        // FILE_SHARE_READ | FILE_SHARE_DELETE, but not FILE_SHARE_WRITE,
+        // which means we can't open them with FILE_GENERIC_WRITE
+        // during rename processing here
+        //
+        // also, for read-only files, we get an error when we open them
+        // for FILE_GENERIC_WRITE, but just DELETE should also work
+        //
+
+        status = NtCreateFile(
+            pSourceHandle, SYNCHRONIZE | DELETE, &objattrs,
+            &IoStatusBlock, NULL, 0, FILE_SHARE_VALID_FLAGS,
+            FILE_OPEN, FILE_SYNCHRONOUS_IO_NONALERT, NULL, 0);
+    }
+
+    --TlsData->file_dont_strip_write_access;
+
+    return status;
+}
+
+
+//---------------------------------------------------------------------------
 // File_RenameFile
 //---------------------------------------------------------------------------
 
 
 _FX NTSTATUS File_RenameFile(
-    HANDLE FileHandle, FILE_RENAME_INFORMATION *info)
+    HANDLE FileHandle, void *info, BOOLEAN LinkOp)
 {
     THREAD_DATA *TlsData = Dll_GetTlsData(NULL);
 
@@ -6559,11 +6753,12 @@ _FX NTSTATUS File_RenameFile(
     WCHAR *ReparsedPath;
     WCHAR save_char;
     ULONG info2_len;
-    FILE_RENAME_INFORMATION *info2;
+    void *info2;
     FILE_NETWORK_OPEN_INFORMATION open_info;
     ULONG SourceFlags;
     ULONG TargetFlags;
     ULONG len;
+    BOOLEAN ReplaceIfExists;
 
     SourceHandle = NULL;
     TargetHandle = NULL;
@@ -6592,51 +6787,22 @@ _FX NTSTATUS File_RenameFile(
         __leave;
 
     //
-    // open the file for write access.  this should cause the file
-    // to be migrated into the sandbox, including its parent directories
+    // migrate into the sandbox, including its parent directories
     //
 
-    RtlInitUnicodeString(&objname, TruePath);
+    status = File_OpenForRenameFile(&SourceHandle, TruePath);
 
-    ++TlsData->file_dont_strip_write_access;
+    //
+    // if we still get STATUS_SHARING_VIOLATION, give up on trying
+    // to make sure the file is migrated into the sandbox, and hope
+    // that the input FileHandle is suitable for a rename operation
+    //
 
-    status = NtCreateFile(
-        &SourceHandle, FILE_GENERIC_WRITE | DELETE, &objattrs,
-        &IoStatusBlock, NULL, 0, FILE_SHARE_VALID_FLAGS,
-        FILE_OPEN, FILE_SYNCHRONOUS_IO_NONALERT, NULL, 0);
+    if (status == STATUS_SHARING_VIOLATION) {
 
-    if (status == STATUS_SHARING_VIOLATION ||
-        status == STATUS_ACCESS_DENIED) {
-
-        //
-        // Windows Mail opens *.eml files with a combination of
-        // FILE_SHARE_READ | FILE_SHARE_DELETE, but not FILE_SHARE_WRITE,
-        // which means we can't open them with FILE_GENERIC_WRITE
-        // during rename processing here
-        //
-        // also, for read-only files, we get an error when we open them
-        // for FILE_GENERIC_WRITE, but just DELETE should also work
-        //
-
-        status = NtCreateFile(
-            &SourceHandle, SYNCHRONIZE | DELETE, &objattrs,
-            &IoStatusBlock, NULL, 0, FILE_SHARE_VALID_FLAGS,
-            FILE_OPEN, FILE_SYNCHRONOUS_IO_NONALERT, NULL, 0);
-
-        //
-        // if we still get STATUS_SHARING_VIOLATION, give up on trying
-        // to make sure the file is migrated into the sandbox, and hope
-        // that the input FileHandle is suitable for a rename operation
-        //
-
-        if (status == STATUS_SHARING_VIOLATION) {
-
-            SourceHandle = FileHandle;
-            status = STATUS_SUCCESS;
-        }
+        SourceHandle = FileHandle;
+        status = STATUS_SUCCESS;
     }
-
-    --TlsData->file_dont_strip_write_access;
 
     if (! NT_SUCCESS(status))
         __leave;
@@ -6679,12 +6845,32 @@ _FX NTSTATUS File_RenameFile(
     // overwrite the shared name buffers
     //
 
-    objname.Length = (USHORT)info->FileNameLength;
-    objname.MaximumLength = objname.Length;
-    objname.Buffer = info->FileName;
+    if (LinkOp) {
 
-    status = File_GetName(
-        info->RootDirectory, &objname, &TruePath, &CopyPath, &TargetFlags);
+        FILE_LINK_INFORMATION *infoL = info;
+
+        objname.Length = (USHORT)infoL->FileNameLength;
+        objname.MaximumLength = objname.Length;
+        objname.Buffer = infoL->FileName;
+
+        status = File_GetName(
+            infoL->RootDirectory, &objname, &TruePath, &CopyPath, &TargetFlags);
+
+        ReplaceIfExists = infoL->ReplaceIfExists;
+
+    } else {
+
+        FILE_RENAME_INFORMATION *infoR = info;
+
+        objname.Length = (USHORT)infoR->FileNameLength;
+        objname.MaximumLength = objname.Length;
+        objname.Buffer = infoR->FileName;
+
+        status = File_GetName(
+            infoR->RootDirectory, &objname, &TruePath, &CopyPath, &TargetFlags);
+
+        ReplaceIfExists = infoR->ReplaceIfExists;
+    }
 
     if (! NT_SUCCESS(status))
         __leave;
@@ -6721,34 +6907,35 @@ _FX NTSTATUS File_RenameFile(
 
     ++TargetFileName;
 
-    //
-    // if the full path name for the target is an open path, we want
-    // to be able to rename outside the sandbox.  however, the parent
-    // directory in that full path may not be an open path itself.
-    // invoke the driver to do such a rename on our behalf
-    //
+    if(!LinkOp) {
 
-    TargetFileName[-1] = L'\0';
+        //
+        // if the full path name for the target is an open path, we want
+        // to be able to rename outside the sandbox.  however, the parent
+        // directory in that full path may not be an open path itself.
+        // invoke the driver to do such a rename on our behalf
+        //
 
-    ReparsedPath = File_FixPermLinksForMatchPath(TargetTruePath);
-    if (! ReparsedPath)
-        ReparsedPath = TargetTruePath;
+        TargetFileName[-1] = L'\0';
 
-    //if (!Dll_CompartmentMode) // NoDriverAssist
-        status = SbieApi_RenameFile(SourceHandle, ReparsedPath, TargetFileName, info->ReplaceIfExists);
-    //else
-    //    status = File_RenameOpenFile(SourceHandle, ReparsedPath, TargetFileName, info->ReplaceIfExists);
+        ReparsedPath = File_FixPermLinksForMatchPath(TargetTruePath);
+        if (! ReparsedPath)
+            ReparsedPath = TargetTruePath;
 
-    if (ReparsedPath != TargetTruePath)
-        Dll_Free(ReparsedPath);
+        status = SbieApi_RenameFile(SourceHandle, ReparsedPath, TargetFileName, ReplaceIfExists);
 
-    TargetFileName[-1] = L'\\';
+        if (ReparsedPath != TargetTruePath)
+            Dll_Free(ReparsedPath);
 
-    if (status != STATUS_BAD_INITIAL_PC) {
+        TargetFileName[-1] = L'\\';
 
-        if (NT_SUCCESS(status))
-            goto after_rename;
-        __leave;
+        if (status != STATUS_BAD_INITIAL_PC) {
+
+            if (NT_SUCCESS(status))
+                goto after_rename;
+            __leave;
+        }
+
     }
 
     //
@@ -6822,14 +7009,37 @@ _FX NTSTATUS File_RenameFile(
     // allocate a new information buffer
     //
 
-    info2_len = sizeof(FILE_RENAME_INFORMATION)
-              + wcslen(TargetFileName) * sizeof(WCHAR);
-    info2 = Dll_AllocTemp(info2_len);
+    if (LinkOp) {
 
-    info2->ReplaceIfExists = info->ReplaceIfExists;
-    info2->RootDirectory = TargetHandle;
-    info2->FileNameLength = wcslen(TargetFileName) * sizeof(WCHAR);
-    memcpy(info2->FileName, TargetFileName, info2->FileNameLength);
+        FILE_LINK_INFORMATION *infoL = info;
+        FILE_LINK_INFORMATION *info2L;
+
+        info2_len = sizeof(FILE_LINK_INFORMATION)
+                  + wcslen(TargetFileName) * sizeof(WCHAR);
+        info2 = Dll_AllocTemp(info2_len);
+
+        info2L = info2;
+        info2L->ReplaceIfExists = infoL->ReplaceIfExists;
+        info2L->RootDirectory = TargetHandle;
+        info2L->FileNameLength = wcslen(TargetFileName) * sizeof(WCHAR);
+        memcpy(info2L->FileName, TargetFileName, info2L->FileNameLength);
+
+    } else {
+
+        FILE_RENAME_INFORMATION *infoR = info;
+        FILE_RENAME_INFORMATION *info2R;
+
+        info2_len = sizeof(FILE_RENAME_INFORMATION)
+                  + wcslen(TargetFileName) * sizeof(WCHAR);
+        info2 = Dll_AllocTemp(info2_len);
+
+        info2R = info2;
+        info2R->ReplaceIfExists = infoR->ReplaceIfExists;
+        info2R->RootDirectory = TargetHandle;
+        info2R->FileNameLength = wcslen(TargetFileName) * sizeof(WCHAR);
+        memcpy(info2R->FileName, TargetFileName, info2R->FileNameLength);
+
+    }
 
     //
     // if the source and target paths are the same (in a case
@@ -6851,7 +7061,7 @@ _FX NTSTATUS File_RenameFile(
 
     RtlInitUnicodeString(&objname, TargetCopyPath);
 
-    if (! info2->ReplaceIfExists) {
+    if (! ReplaceIfExists) {
 
         //
         // if caller did not explicitly ask to replace, but the
@@ -6865,7 +7075,9 @@ _FX NTSTATUS File_RenameFile(
 
             if (IS_DELETE_MARK(&open_info.CreationTime)) { // !File_Delete_v2 &&
 
-                info2->ReplaceIfExists = TRUE;
+				ReplaceIfExists = TRUE;
+                if (LinkOp) ((FILE_LINK_INFORMATION*)info2)->ReplaceIfExists = TRUE;
+                else        ((FILE_RENAME_INFORMATION*)info2)->ReplaceIfExists = TRUE;
 
             } else {
                 status = STATUS_OBJECT_NAME_COLLISION;
@@ -6918,7 +7130,7 @@ _FX NTSTATUS File_RenameFile(
         }
     }
 
-    if (info2->ReplaceIfExists) {
+    if (ReplaceIfExists) {
 
         __sys_NtDeleteFile(&objattrs);
     }
@@ -6931,7 +7143,7 @@ issue_rename:
 
     status = __sys_NtSetInformationFile(
         SourceHandle, &IoStatusBlock,
-        info2, info2_len, FileRenameInformation);
+        info2, info2_len, LinkOp ? FileLinkInformation : FileRenameInformation);
 
     if (status == STATUS_SHARING_VIOLATION && SourceHandle != FileHandle) {
 
@@ -6946,7 +7158,7 @@ issue_rename:
 
         status = __sys_NtSetInformationFile(
             SourceHandle, &IoStatusBlock,
-            info2, info2_len, FileRenameInformation);
+            info2, info2_len, LinkOp ? FileLinkInformation : FileRenameInformation);
     }
 
     if (! NT_SUCCESS(status)) {

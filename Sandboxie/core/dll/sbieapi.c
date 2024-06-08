@@ -1,6 +1,6 @@
 /*
  * Copyright 2004-2020 Sandboxie Holdings, LLC 
- * Copyright 2020-2022 David Xanatos, xanasoft.com
+ * Copyright 2020-2024 David Xanatos, xanasoft.com
  *
  * This program is free software: you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -28,10 +28,12 @@
 #include "core/drv/api_defs.h"
 #include "core/svc/msgids.h"
 #include "common/my_version.h"
-//#include "core/low/lowdata.h"
-//
-//extern SBIELOW_DATA* SbieApi_data;
-//#define SBIELOW_CALL(x) ((P_##x)&SbieApi_data->x##_code)
+#include "core/low/lowdata.h"
+
+extern SBIELOW_DATA* SbieApi_data;
+#define SBIELOW_CALL(x) ((P_##x)&SbieApi_data->x##_code)
+
+extern P_NtDeviceIoControlFile __sys_NtDeviceIoControlFile;
 
 #pragma optimize("",off)
 
@@ -144,8 +146,26 @@ _FX NTSTATUS SbieApi_Ioctl(ULONG64 *parms)
         // processing a request before sending the next request
         //
 
-        extern P_NtDeviceIoControlFile __sys_NtDeviceIoControlFile;
-        if (__sys_NtDeviceIoControlFile) {
+        /*BOOLEAN IsNative = SbieApi_data && !SbieApi_data->flags.bNoSysHooks
+#ifndef _WIN64
+            && !Dll_IsWow64
+#endif
+#ifdef _M_ARM64EC
+            && !Dll_IsArm64ec
+#endif
+            ;
+
+        if (IsNative) {
+
+            //
+            // when we are native we can call NtDeviceIoControlFile directly
+            //
+
+            status = SBIELOW_CALL(NtDeviceIoControlFile)(
+                SbieApi_DeviceHandle, NULL, NULL, NULL, &MyIoStatusBlock,
+                API_SBIEDRV_CTLCODE, parms, sizeof(ULONG64) * 8, NULL, 0);
+
+        } else*/ if (__sys_NtDeviceIoControlFile) {
         
             //
             // once NtDeviceIoControlFile is hooked, bypass it
@@ -162,10 +182,6 @@ _FX NTSTATUS SbieApi_Ioctl(ULONG64 *parms)
                 API_SBIEDRV_CTLCODE, parms, sizeof(ULONG64) * 8, NULL, 0);
         }
 
-        // that would be even better but would only work in the native case
-        //status = SBIELOW_CALL(NtDeviceIoControlFile)(
-        //        SbieApi_DeviceHandle, NULL, NULL, NULL, &MyIoStatusBlock,
-        //        API_SBIEDRV_CTLCODE, parms, sizeof(ULONG64) * 8, NULL, 0);
     }
 
     return status;
@@ -1327,6 +1343,27 @@ _FX LONG SbieApi_QuerySymbolicLink(
         if (NameBuf)
             *NameBuf = L'\0';
     }
+
+    return status;
+}
+
+
+//---------------------------------------------------------------------------
+// SbieApi_QueryDrvInfo
+//---------------------------------------------------------------------------
+
+
+_FX LONG SbieApi_QueryDrvInfo(ULONG info_class, VOID* info_data, ULONG info_size)
+{
+    NTSTATUS status;
+    __declspec(align(8)) ULONG64 parms[API_NUM_ARGS];
+
+    memset(parms, 0, sizeof(parms));
+    parms[0] = API_QUERY_DRIVER_INFO;
+    parms[1] = info_class;
+    parms[2] = (ULONG64)(ULONG_PTR)info_data;
+    parms[3] = info_size;
+    status = SbieApi_Ioctl(parms);
 
     return status;
 }

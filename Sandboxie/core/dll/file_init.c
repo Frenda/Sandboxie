@@ -1,6 +1,6 @@
 /*
  * Copyright 2004-2020 Sandboxie Holdings, LLC 
- * Copyright 2020-2023 David Xanatos, xanasoft.com
+ * Copyright 2020-2024 David Xanatos, xanasoft.com
  *
  * This program is free software: you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -144,7 +144,7 @@ _FX BOOLEAN File_Init(void)
 
     File_DriveAddSN = SbieApi_QueryConfBool(NULL, L"UseVolumeSerialNumbers", FALSE);
 
-    File_NoReparse = SbieApi_QueryConfBool(NULL, L"NoPathReparse", FALSE);
+    File_UseVolumeGuid = SbieApi_QueryConfBool(NULL, L"UseVolumeGuidWhenNoLetter", FALSE);
 
     if (! File_InitDrives(0xFFFFFFFF))
         return FALSE;
@@ -878,6 +878,25 @@ _FX void File_InitLinks(THREAD_DATA *TlsData)
                     DosPath += wcslen(DosPath) + 1;
                 }
 
+			} else if (File_UseVolumeGuid) {
+
+                // handle the case where the volume is not mounted as a
+                // drive letter:
+                //     add reparse points for all mounted directories
+
+                //
+                // This behaviour creates \[BoxRoot]\drive\{guid} folders
+                // instead of using the first mount point on a volume with a letter
+                //
+
+                WCHAR *FirstDosPath = DosPath;
+                File_AddLink(TRUE, FirstDosPath, DeviceName);
+                DosPath += DosPathLen + 1;
+                while (*DosPath) {
+                    File_AddLink(TRUE, DosPath, DeviceName);
+                    DosPath += wcslen(DosPath) + 1;
+                }
+				
             } else {
 
                 //
@@ -889,11 +908,17 @@ _FX void File_InitLinks(THREAD_DATA *TlsData)
                 //     also to the first mounted directory
                 //
 
+                //
+                // Note: this behaviour makes the first mounted directory
+                // the location in the box where all files for that volume will be located
+                // other mount points will be redirected to this folder
+                //
+
                 WCHAR *FirstDosPath = DosPath;
-                File_AddLink(TRUE, FirstDosPath, DeviceName);
+                File_AddLink(TRUE, DeviceName, FirstDosPath);
                 DosPath += DosPathLen + 1;
                 while (*DosPath) {
-                    File_AddLink(TRUE, DosPath, DeviceName);
+                    File_AddLink(TRUE, DosPath, FirstDosPath);
                     DosPath += wcslen(DosPath) + 1;
                 }
             }
@@ -1640,14 +1665,29 @@ _FX WCHAR *File_AllocAndInitEnvironment_2(
 
 
 //---------------------------------------------------------------------------
-// File_TranslateDosToNtPath
+// File_ConcatPath2
 //---------------------------------------------------------------------------
 
 
-_FX WCHAR *File_TranslateDosToNtPath(const WCHAR *DosPath)
+_FX WCHAR *File_ConcatPath2(const WCHAR *Path1, ULONG Path1Len, const WCHAR *Path2, ULONG Path2Len)
+{
+    ULONG Length = Path1Len + Path2Len;
+    WCHAR* Path = Dll_Alloc((Length + 1) * sizeof(WCHAR));
+    wmemcpy(Path, Path1, Path1Len);
+    wmemcpy(Path + Path1Len, Path2, Path2Len);
+    Path[Length] = L'\0';
+    return Path;
+}
+
+
+//---------------------------------------------------------------------------
+// File_TranslateDosToNtPath2
+//---------------------------------------------------------------------------
+
+
+_FX WCHAR *File_TranslateDosToNtPath2(const WCHAR *DosPath, ULONG DosPathLen)
 {
     WCHAR *NtPath = NULL;
-    ULONG len_dos;
 
     if (DosPath && DosPath[0] && DosPath[1]) {
 
@@ -1657,11 +1697,7 @@ _FX WCHAR *File_TranslateDosToNtPath(const WCHAR *DosPath)
             // network path
             //
 
-            DosPath += 2;
-            len_dos = wcslen(DosPath) + 1;
-            NtPath = Dll_Alloc((File_MupLen + len_dos) * sizeof(WCHAR));
-            wmemcpy(NtPath, File_Mup, File_MupLen);
-            wmemcpy(NtPath + File_MupLen, DosPath, len_dos);
+            NtPath = File_ConcatPath2(File_Mup, File_MupLen, DosPath + 2, DosPathLen - 2);
 
         } else if (DosPath[1] == L':' &&
                         (DosPath[2] == L'\\' || DosPath[2] == L'\0')) {
@@ -1673,11 +1709,7 @@ _FX WCHAR *File_TranslateDosToNtPath(const WCHAR *DosPath)
             FILE_DRIVE *drive = File_GetDriveForLetter(DosPath[0]);
             if (drive) {
 
-                DosPath += 2;
-                len_dos = wcslen(DosPath) + 1;
-                NtPath = Dll_Alloc((drive->len + len_dos) * sizeof(WCHAR));
-                wmemcpy(NtPath, drive->path, drive->len);
-                wmemcpy(NtPath + drive->len, DosPath, len_dos);
+                NtPath = File_ConcatPath2(drive->path, drive->len, DosPath + 2, DosPathLen - 2);
 
                 LeaveCriticalSection(File_DrivesAndLinks_CritSec);
             }
@@ -1685,6 +1717,17 @@ _FX WCHAR *File_TranslateDosToNtPath(const WCHAR *DosPath)
     }
 
     return NtPath;
+}
+
+
+//---------------------------------------------------------------------------
+// File_TranslateDosToNtPath
+//---------------------------------------------------------------------------
+
+
+_FX WCHAR *File_TranslateDosToNtPath(const WCHAR *DosPath)
+{
+    return File_TranslateDosToNtPath2(DosPath, DosPath ? wcslen(DosPath) : 0);
 }
 
 

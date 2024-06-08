@@ -17,7 +17,7 @@ class CNewBoxWizard : public QWizard
     Q_OBJECT
 
 public:
-    enum { Page_Type, Page_Files, Page_Advanced, Page_Summary };
+    enum { Page_Type, Page_Files, Page_Isolation, Page_Advanced, Page_Summary };
 
     CNewBoxWizard(bool bAlowTemp, QWidget *parent = nullptr);
 
@@ -52,6 +52,8 @@ class CBoxTypePage : public QWizardPage
 
 public:
     CBoxTypePage(bool bAlowTemp, QWidget *parent = nullptr);
+
+    void initializePage() override;
 
     int nextId() const override;
     bool isComplete() const override;
@@ -101,6 +103,30 @@ private:
 
 
 //////////////////////////////////////////////////////////////////////////////////////////
+// CIsolationPage
+// 
+
+class CIsolationPage : public QWizardPage
+{
+    Q_OBJECT
+
+public:
+    CIsolationPage(QWidget *parent = nullptr);
+
+    int nextId() const override;
+    void initializePage() override;
+    bool validatePage() override;
+    void OnDropAdminChanged(int state);
+
+private:
+    QCheckBox* m_pShareAccess;
+    QCheckBox* m_pMSIServer;
+    QCheckBox* m_pDropAdmin;
+    QCheckBox* m_pBoxToken;
+};
+
+
+//////////////////////////////////////////////////////////////////////////////////////////
 // CAdvancedPage
 // 
 
@@ -116,9 +142,6 @@ public:
     bool validatePage() override;
 
 private:
-    QCheckBox* m_pShareAccess;
-    QCheckBox* m_pMSIServer;
-    QCheckBox* m_pBoxToken;
 };
 
 

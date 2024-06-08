@@ -225,6 +225,12 @@ MSG_HEADER *MountManager::CreateHandler(MSG_HEADER *msg)
 
     std::wstring ImageFile = GetImageFileName(req->file_root);
 
+    std::wstring RootPath(req->file_root, wcsrchr(req->file_root, L'\\'));
+    HANDLE handle = OpenOrCreateNtFolder(RootPath.c_str());
+    if (!handle)
+        return SHORT_REPLY(ERROR_PATH_NOT_FOUND);
+    CloseHandle(handle);
+
     std::shared_ptr<BOX_MOUNT> pMount = MountImDisk(ImageFile, req->password, req->image_size, session_id);
     if(!pMount)
         return SHORT_REPLY(ERROR_FUNCTION_FAILED);
@@ -991,7 +997,7 @@ bool MountManager::AcquireBoxRoot(const WCHAR* boxname, const WCHAR* reg_root, c
     std::wstring TargetNtPath;
 
     SCertInfo CertInfo = { 0 };
-    if ((UseFileImage || UseRamDisk) && (!NT_SUCCESS(SbieApi_Call(API_QUERY_DRIVER_INFO, 3, -1, (ULONG_PTR)&CertInfo, sizeof(CertInfo))) || !CERT_IS_LEVEL(CertInfo, (UseFileImage ? eCertAdvanced : eCertStandard)))) {
+    if ((UseFileImage || UseRamDisk) && (!NT_SUCCESS(SbieApi_Call(API_QUERY_DRIVER_INFO, 3, -1, (ULONG_PTR)&CertInfo, sizeof(CertInfo))) || !CERT_IS_LEVEL(CertInfo, (UseFileImage ? eCertAdvanced1 : eCertStandard)))) {
         const WCHAR* strings[] = { boxname, UseFileImage ? L"UseFileImage" : L"UseRamDisk" , NULL };
         SbieApi_LogMsgExt(session_id, UseFileImage ? 6009 : 6008, strings);
         errlvl = 0x66;

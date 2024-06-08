@@ -2,6 +2,18 @@
 * Missing Messages in Text-Bulgarian-1026.txt
 *==========
 
+1205;evt;pop;err;01
+SBIE1205 Invalid DynData found in registry, error: %2
+.
+
+1206;evt;pop;err;01
+SBIE1206 Your Windows build (%2) is not yet supported by sandboxie, error: %3
+.
+
+1207;pop;err;01
+SBIE1207 Your Windows build (%2) is not yet supported by Sandboxie, which means applications will run without security isolation!
+.
+
 1222;pop;err;02
 SBIE1222 Error with security token:  %2
 .
@@ -174,6 +186,10 @@ SBIE2325 Debug:  %2
 SBIE2335 Initialization failed for process %2
 .
 
+2360;pop;err;01
+SBIE2360 Failed to inject SOCKS5 proxy:  %2
+.
+
 2336;pop;err;01
 SBIE2336 Error in GUI server:  %2
 .
@@ -192,6 +208,15 @@ SBIE9234 Service startup error %2
 
 3107;txt;01
 Type the name of a program or path to open the following file in the current sandbox:
+.
+
+3198;txt;01
+Do you want to start a new program in the %2 sandbox?
+You received this message because you set AlertBeforeStart=y.
+.
+
+3199;txt;01
+This startup request does not appear to be invoked by the SANDBOXIE component. Are you sure you want to run it? If this is your action, you can ignore it and choose yes.
 .
 
 3315;txt;01

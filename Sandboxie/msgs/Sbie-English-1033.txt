@@ -98,6 +98,14 @@ SBIE1152 Trampoline allocation failed %2
 SBIE1153 Sandboxie initialization failed.  Close all programs and then re-install Sandboxie  OR  restart your computer.
 .
 
+1205;evt;pop;err;01
+SBIE1205 Invalid DynData found in registry, error: %2
+.
+
+1206;evt;pop;err;01
+SBIE1206 Your Windows build (%2) is not yet supported by sandboxie, error: %3
+.
+
 #----------------------------------------------------------------------------
 # SbieDrv
 #
@@ -118,6 +126,10 @@ SBIE1203 Cannot build path list (error in %2)
 
 1204;pop;err;01
 SBIE1204 Sandbox creation failed for %3 %2
+.
+
+1207;pop;err;01
+SBIE1207 Your Windows build (%2) is not yet supported by Sandboxie, which means applications will run without security isolation!
 .
 
 1211;pop;err;01
@@ -739,6 +751,10 @@ SBIE2332 Cannot access file SbiePst.dat
 SBIE2335 Initialization failed for process %2
 .
 
+2360;pop;err;01
+SBIE2360 Failed to inject SOCKS5 proxy:  %2
+.
+
 2336;pop;err;01
 SBIE2336 Error in GUI server:  %2
 .
@@ -904,6 +920,15 @@ Desktop
 Programs
 .
 
+3198;txt;01
+Do you want to start a new program in the %2 sandbox?
+You received this message because you set AlertBeforeStart=y.
+.
+
+3199;txt;01
+This startup request does not appear to be invoked by the SANDBOXIE component. Are you sure you want to run it? If this is your action, you can ignore it and choose yes.
+.
+
 3202;txt;01
 Invalid command line parameter:  %2
 .
@@ -997,9 +1022,9 @@ Delete command failed:  %0
 # You have installed Sandboxie more than 30 days ago.
 # .
 
-# 3232;txt;01
-# Personal use of Sandboxie is permitted free of charge for as long as you wish.
-# .
+#3232;txt;01
+#Personal use of Sandboxie is permitted free of charge for as long as you wish.
+#.
 
 # 3233;txt;01
 # However, the free version will now pause for a few seconds.
